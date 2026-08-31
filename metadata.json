@@ -1,0 +1,6 @@
+{
+  "name": "Kotbari Dawah Circle, Dawah Chart",
+  "description": "A Dawah growth tracking system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
