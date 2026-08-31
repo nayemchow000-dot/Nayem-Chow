@@ -5,10 +5,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    host: process.env.SQL_HOST as string,
-    user: process.env.SQL_ADMIN_USER as string,
-    password: process.env.SQL_ADMIN_PASSWORD as string,
-    database: process.env.SQL_DB_NAME as string,
-    ssl: false,
+    url: process.env.DATABASE_URL as string,
   },
 });
