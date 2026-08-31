@@ -7,6 +7,7 @@ export default function Activities() {
   const [activities, setActivities] = useState<any[]>([]);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   // Form states for new activity
@@ -16,16 +17,22 @@ export default function Activities() {
 
   const fetchData = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const [actRes, contRes] = await Promise.all([
         fetch('/api/activities'),
         fetch('/api/contacts')
       ]);
+      if (!actRes.ok || !contRes.ok) throw new Error('API request failed');
       const actData = await actRes.json();
       const contData = await contRes.json();
       setActivities(Array.isArray(actData) ? actData : []);
       setAllContacts(Array.isArray(contData) ? contData : []);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Error loading activities:", err);
+      setError("Unable to load activities. Please check your database connection or backend deployment.");
+      setActivities([]);
+      setAllContacts([]);
     } finally {
       setLoading(false);
     }
@@ -270,6 +277,10 @@ export default function Activities() {
                     {loading ? (
                       <tr>
                         <td colSpan={3} className="px-6 py-8 text-center text-white/40">Loading...</td>
+                      </tr>
+                    ) : error ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-8 text-center text-rose-500 bg-rose-500/5">{error}</td>
                       </tr>
                     ) : filteredActs.length === 0 ? (
                       <tr>

@@ -7,12 +7,27 @@ import { Link } from 'react-router';
 export default function Dashboard() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchContacts = () => {
-    fetch('/api/contacts').then(r => r.json()).then(data => {
-      setContacts(data);
+  const fetchContacts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch('/api/contacts');
+      if (!res.ok) throw new Error('API request failed');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setContacts(data);
+      } else {
+        throw new Error('Invalid data format');
+      }
+    } catch (err: any) {
+      console.error("Error loading priorities:", err);
+      setError("Unable to load priorities. Please check your database connection.");
+      setContacts([]);
+    } finally {
       setLoading(false);
-    });
+    }
   };
 
   useEffect(() => {
@@ -191,6 +206,10 @@ export default function Dashboard() {
                     {loading ? (
                       <tr>
                         <td colSpan={4} className="p-8 text-center text-white/40">Loading priorities...</td>
+                      </tr>
+                    ) : error ? (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-rose-500 bg-rose-500/5 rounded-b-xl border border-rose-500/20">{error}</td>
                       </tr>
                     ) : topPriority.length === 0 ? (
                       <tr>

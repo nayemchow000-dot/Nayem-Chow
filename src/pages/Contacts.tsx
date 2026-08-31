@@ -7,6 +7,7 @@ import { Link } from 'react-router';
 export default function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   
@@ -16,11 +17,25 @@ export default function Contacts() {
   const [newPriority, setNewPriority] = useState('growing');
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
 
-  const fetchContacts = () => {
-    fetch('/api/contacts').then(r => r.json()).then(data => {
-      setContacts(data);
+  const fetchContacts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch('/api/contacts');
+      if (!res.ok) throw new Error('API request failed');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setContacts(data);
+      } else {
+        throw new Error('Invalid data format');
+      }
+    } catch (err: any) {
+      console.error("Error loading contacts:", err);
+      setError("Unable to load members. Please check your database connection.");
+      setContacts([]);
+    } finally {
       setLoading(false);
-    });
+    }
   };
 
   useEffect(() => {
@@ -191,6 +206,10 @@ export default function Contacts() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-8 text-center text-white/40">Loading contacts...</td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-8 text-center text-rose-500 bg-rose-500/5">{error}</td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>

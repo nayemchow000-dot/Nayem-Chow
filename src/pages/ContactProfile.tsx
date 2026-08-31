@@ -8,6 +8,7 @@ export default function ContactProfile() {
   const { id } = useParams();
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Form states for Edit Profile
   const [editName, setEditName] = useState('');
@@ -16,19 +17,34 @@ export default function ContactProfile() {
 
   const [salahLogs, setSalahLogs] = useState<any[]>([]);
 
-  const fetchContact = () => {
-    fetch(`/api/contacts/${id}`).then(r => r.json()).then(data => {
+  const fetchContact = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`/api/contacts/${id}`);
+      if (!res.ok) throw new Error('API request failed');
+      const data = await res.json();
+      
       setContact(data);
       setEditName(data.name);
       setEditPhone(data.phone || '');
       setEditArea(data.area || '');
+      
+      // Fetch salah logs separately without blocking main profile load
+      fetch(`/api/contacts/${id}/salah`).then(r => {
+        if (!r.ok) return [];
+        return r.json();
+      }).then(data => {
+        setSalahLogs(Array.isArray(data) ? data : []);
+      }).catch(() => {
+        setSalahLogs([]);
+      });
+    } catch (err: any) {
+      console.error("Error loading profile:", err);
+      setError("Unable to load profile. Please check your database connection or backend deployment.");
+    } finally {
       setLoading(false);
-    });
-    fetch(`/api/contacts/${id}/salah`).then(r => r.json()).then(data => {
-      setSalahLogs(Array.isArray(data) ? data : []);
-    }).catch(() => {
-      setSalahLogs([]);
-    });
+    }
   };
 
   useEffect(() => {
@@ -69,6 +85,13 @@ export default function ContactProfile() {
   };
 
   if (loading) return <div className="p-8 text-center text-white/40 animate-pulse">Loading profile...</div>;
+  if (error) return (
+    <div className="p-8 max-w-md mx-auto mt-12 text-center border border-rose-500/20 rounded-2xl bg-rose-500/5">
+      <h3 className="text-lg font-medium text-rose-500 mb-2">Error Loading Profile</h3>
+      <p className="text-rose-500/80 text-sm mb-6">{error}</p>
+      <Link to="/contacts" className="text-emerald-500 hover:text-emerald-400 text-sm underline underline-offset-4">Return to Contacts</Link>
+    </div>
+  );
   if (!contact || contact.id === undefined) return <div className="p-8 text-center text-white/40">Brother not found.</div>;
 
   const past7DaysData = Array.from({length: 7}, (_, i) => {

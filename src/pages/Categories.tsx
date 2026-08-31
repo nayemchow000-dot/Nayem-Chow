@@ -21,22 +21,29 @@ export default function Categories() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(DEFAULT_CATEGORIES[0]);
   const [search, setSearch] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
 
   const fetchData = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const [contRes, catRes] = await Promise.all([
         fetch('/api/contacts'),
         fetch('/api/custom-categories')
       ]);
+      if (!contRes.ok || !catRes.ok) throw new Error('API request failed');
       const contData = await contRes.json();
       const catData = await catRes.json();
       setContacts(Array.isArray(contData) ? contData : []);
       setCustomCategories(Array.isArray(catData) ? catData : []);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Error loading categories:", err);
+      setError("Unable to load members. Please check your database connection or backend deployment.");
+      setContacts([]);
+      setCustomCategories([]);
     } finally {
       setLoading(false);
     }
@@ -176,6 +183,10 @@ export default function Categories() {
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
             {loading ? (
               <div className="text-center text-white/40 mt-10">Loading brothers...</div>
+            ) : error ? (
+              <div className="text-center p-12 border border-rose-500/20 rounded-2xl bg-rose-500/5">
+                <p className="text-rose-500 text-sm">{error}</p>
+              </div>
             ) : filteredContacts.length === 0 ? (
               <div className="text-center p-12 border border-dashed border-white/10 rounded-2xl bg-white/[0.01]">
                 <Tags className="w-8 h-8 text-white/20 mx-auto mb-3" />
