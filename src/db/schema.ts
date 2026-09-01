@@ -77,6 +77,13 @@ export const generalActivities = pgTable('general_activities', {
 
 export const customCategories = pgTable('custom_categories', {
   id: uuid('id').defaultRandom().primaryKey(),
-  name: text('name').notNull().unique(),
+  name: text('name').notNull().unique(), // System identifier (English)
+  banglaName: text('bangla_name'),
+  description: text('description'),
+  image: text('image'),
+  coverImage: text('cover_image'),
+  icon: text('icon'),
+  displayOrder: integer('display_order').default(0).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

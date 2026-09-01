@@ -5,6 +5,7 @@ import ContactProfile from './pages/ContactProfile';
 import Analytics from './pages/Analytics';
 import Activities from './pages/Activities';
 import Categories from './pages/Categories';
+import SettingsPage from './pages/Settings';
 import { LayoutDashboard, Users, UserPlus, Settings, Activity, CalendarHeart, Tags } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -37,10 +38,10 @@ function Sidebar() {
         })}
       </nav>
       <div className="p-6 mt-auto border-t border-white/5 bg-white/[0.02]">
-        <button className="flex items-center space-x-3 text-white/60 hover:text-white transition-colors w-full">
+        <Link to="/settings" className={cn("flex items-center space-x-3 transition-colors w-full p-2 -mx-2 rounded-lg", location.pathname === '/settings' ? "text-emerald-400 bg-emerald-500/10" : "text-white/60 hover:text-white hover:bg-white/5")}>
           <Settings className="w-4 h-4" />
-          <span className="text-sm">Settings</span>
-        </button>
+          <span className="text-sm font-medium">Settings</span>
+        </Link>
       </div>
     </div>
   );
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="/categories" element={<Categories />} />
               <Route path="/activities" element={<Activities />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </div>
         </main>

@@ -167,7 +167,7 @@ apiRouter.post('/activities', async (req, res) => {
 
 apiRouter.get('/custom-categories', async (req, res) => {
   try {
-    const categories = await db.select().from(customCategories).orderBy(desc(customCategories.createdAt));
+    const categories = await db.select().from(customCategories).orderBy(desc(customCategories.displayOrder), desc(customCategories.createdAt));
     res.json(categories);
   } catch (error: any) {
     console.error(error);
@@ -179,6 +179,99 @@ apiRouter.post('/custom-categories', async (req, res) => {
   try {
     const newCategory = await db.insert(customCategories).values(req.body).returning();
     res.json(newCategory[0]);
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.put('/custom-categories/:id', async (req, res) => {
+  try {
+    const oldCat = await db.select().from(customCategories).where(eq(customCategories.id, req.params.id));
+    if (!oldCat.length) return res.status(404).json({error: 'Not found'});
+    
+    const oldName = oldCat[0].name;
+    const newName = req.body.name;
+    
+    const dataToUpdate = { ...req.body };
+    delete dataToUpdate.id;
+    delete dataToUpdate.createdAt;
+
+    const updated = await db.update(customCategories)
+      .set(dataToUpdate)
+      .where(eq(customCategories.id, req.params.id))
+      .returning();
+      
+    // If the category name changed, update all contacts holding this category
+    if (newName && newName !== oldName) {
+      const allContacts = await db.select().from(contacts);
+      for (const c of allContacts) {
+        const tags = c.categoryTags || [];
+        if (tags.includes(oldName)) {
+          const newTags = tags.map(t => t === oldName ? newName : t);
+          await db.update(contacts).set({ categoryTags: newTags }).where(eq(contacts.id, c.id));
+        }
+      }
+    }
+    
+    res.json(updated[0]);
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/custom-categories/:id', async (req, res) => {
+  try {
+    const oldCat = await db.select().from(customCategories).where(eq(customCategories.id, req.params.id));
+    if (oldCat.length > 0) {
+       const oldName = oldCat[0].name;
+       const allContacts = await db.select().from(contacts);
+       for (const c of allContacts) {
+         const tags = c.categoryTags || [];
+         if (tags.includes(oldName)) {
+           const newTags = tags.filter(t => t !== oldName);
+           await db.update(contacts).set({ categoryTags: newTags }).where(eq(contacts.id, c.id));
+         }
+       }
+       await db.delete(customCategories).where(eq(customCategories.id, req.params.id));
+    }
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.post('/contacts/bulk-assign-category', async (req, res) => {
+  try {
+    const { categoryName, addedContactIds, removedContactIds } = req.body;
+    
+    if (addedContactIds && addedContactIds.length > 0) {
+      const allAdded = await db.select().from(contacts);
+      for (const c of allAdded) {
+        if (addedContactIds.includes(c.id)) {
+           const tags = c.categoryTags || [];
+           if (!tags.includes(categoryName)) {
+             await db.update(contacts).set({ categoryTags: [...tags, categoryName] }).where(eq(contacts.id, c.id));
+           }
+        }
+      }
+    }
+    
+    if (removedContactIds && removedContactIds.length > 0) {
+      const allRemoved = await db.select().from(contacts);
+      for (const c of allRemoved) {
+        if (removedContactIds.includes(c.id)) {
+           const tags = c.categoryTags || [];
+           if (tags.includes(categoryName)) {
+             await db.update(contacts).set({ categoryTags: tags.filter(t => t !== categoryName) }).where(eq(contacts.id, c.id));
+           }
+        }
+      }
+    }
+    
+    res.json({ success: true });
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: error.message });
