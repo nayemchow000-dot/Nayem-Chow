@@ -133,7 +133,7 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-white/60 mb-4">
-              Upload your logos to Cloudinary (or any image host) and paste the URLs below.
+              Upload your logos directly from your device.
             </p>
             
             {['primaryLogo', 'mobileLogo', 'favicon'].map((field) => (
@@ -141,14 +141,22 @@ export default function Settings() {
                 {renderImagePreview(brandingForm[field as keyof typeof brandingForm], field)}
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-white/60 mb-1 capitalize">
-                    {field.replace(/([A-Z])/g, ' $1').trim()} URL
+                    {field.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   <input 
-                    type="text" 
-                    value={brandingForm[field as keyof typeof brandingForm]} 
-                    onChange={(e) => setBrandingForm(prev => ({ ...prev, [field]: e.target.value }))}
-                    placeholder="https://..."
-                    className="w-full bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-2 focus:outline-none focus:border-emerald-500/50"
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setBrandingForm(prev => ({ ...prev, [field]: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-2 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
               </div>
@@ -175,7 +183,7 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-white/60 mb-4">
-              Manage decorative images for backgrounds and corners across the app.
+              Upload decorative images for backgrounds and corners across the app.
             </p>
 
             {['heroBackground', 'cornerImage'].map((field) => (
@@ -183,14 +191,22 @@ export default function Settings() {
                 {renderImagePreview(brandingForm[field as keyof typeof brandingForm], field)}
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-white/60 mb-1 capitalize">
-                    {field.replace(/([A-Z])/g, ' $1').trim()} URL
+                    {field.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   <input 
-                    type="text" 
-                    value={brandingForm[field as keyof typeof brandingForm]} 
-                    onChange={(e) => setBrandingForm(prev => ({ ...prev, [field]: e.target.value }))}
-                    placeholder="https://..."
-                    className="w-full bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-2 focus:outline-none focus:border-emerald-500/50"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setBrandingForm(prev => ({ ...prev, [field]: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-2 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
               </div>
