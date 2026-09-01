@@ -87,3 +87,13 @@ export const customCategories = pgTable('custom_categories', {
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const brandingSettings = pgTable('branding_settings', {
+  id: integer('id').primaryKey(),
+  primaryLogo: text('primary_logo'),
+  mobileLogo: text('mobile_logo'),
+  favicon: text('favicon'),
+  heroBackground: text('hero_background'),
+  cornerImage: text('corner_image'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

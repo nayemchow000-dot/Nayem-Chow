@@ -1,12 +1,50 @@
 import { Router } from 'express';
 import { db } from './db/db';
-import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories } from './db/schema';
+import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings } from './db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
 export const apiRouter = Router();
 
 apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Branding Endpoints
+apiRouter.get('/branding', async (req, res) => {
+  try {
+    const settings = await db.select().from(brandingSettings).where(eq(brandingSettings.id, 1));
+    if (settings.length > 0) {
+      res.json(settings[0]);
+    } else {
+      res.json({});
+    }
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.put('/branding', async (req, res) => {
+  try {
+    const { primaryLogo, mobileLogo, favicon, heroBackground, cornerImage } = req.body;
+    const existing = await db.select().from(brandingSettings).where(eq(brandingSettings.id, 1));
+    
+    if (existing.length > 0) {
+      const updated = await db.update(brandingSettings)
+        .set({ primaryLogo, mobileLogo, favicon, heroBackground, cornerImage, updatedAt: new Date() })
+        .where(eq(brandingSettings.id, 1))
+        .returning();
+      res.json(updated[0]);
+    } else {
+      const inserted = await db.insert(brandingSettings)
+        .values({ id: 1, primaryLogo, mobileLogo, favicon, heroBackground, cornerImage })
+        .returning();
+      res.json(inserted[0]);
+    }
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Seed db if empty

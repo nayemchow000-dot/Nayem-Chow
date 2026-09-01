@@ -3,11 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Dialog, Dialog
 import { Contact, STAGES } from '../types';
 import { ArrowRight, Flame, Target, UserPlus, TrendingUp, TrendingDown, Minus, Edit2 } from 'lucide-react';
 import { Link } from 'react-router';
+import { useBranding } from '../contexts/BrandingContext';
 
 export default function Dashboard() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { branding } = useBranding();
 
   const fetchContacts = async () => {
     try {
@@ -119,11 +121,28 @@ export default function Dashboard() {
     .slice(0, 5);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-serif italic tracking-tight text-[#E5E5E7]">My Dawah Priority</h1>
-        <p className="text-white/40 mt-1 text-sm">Assalamu Alaikum. Here is your focus for today.</p>
-      </div>
+    <div className="relative min-h-[calc(100vh-4rem)] pb-12">
+      {/* Background Images Layer */}
+      {branding?.heroBackground && (
+        <div 
+          className="absolute inset-0 opacity-5 pointer-events-none z-0 mix-blend-screen bg-cover bg-center"
+          style={{ backgroundImage: `url(${branding.heroBackground})` }}
+        />
+      )}
+      {branding?.cornerImage && (
+        <img 
+          src={branding.cornerImage} 
+          alt="Decoration" 
+          className="absolute top-0 right-0 w-64 md:w-96 opacity-10 pointer-events-none z-0 mix-blend-lighten mask-image-fade"
+        />
+      )}
+
+      {/* Content Layer */}
+      <div className="space-y-8 animate-in fade-in duration-500 relative z-10">
+        <div>
+          <h1 className="text-3xl font-serif italic tracking-tight text-[#E5E5E7]">My Dawah Priority</h1>
+          <p className="text-white/40 mt-1 text-sm">Assalamu Alaikum. Here is your focus for today.</p>
+        </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-rose-500/5 border-rose-500/20">
@@ -327,6 +346,7 @@ export default function Dashboard() {
           </section>
         </div>
       </div>
+    </div>
     </div>
   );
 }

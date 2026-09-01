@@ -8,9 +8,12 @@ import Categories from './pages/Categories';
 import SettingsPage from './pages/Settings';
 import { LayoutDashboard, Users, UserPlus, Settings, Activity, CalendarHeart, Tags } from 'lucide-react';
 import { cn } from './lib/utils';
+import { useBranding } from './contexts/BrandingContext';
 
 function Sidebar() {
   const location = useLocation();
+  const { branding } = useBranding();
+  
   const links = [
     { href: '/', label: 'My Dawah Priority', icon: LayoutDashboard },
     { href: '/contacts', label: 'Dawah Members', icon: Users },
@@ -21,8 +24,12 @@ function Sidebar() {
 
   return (
     <div className="w-64 border-r border-white/5 bg-[#0F0F12] flex flex-col h-screen fixed top-0 left-0">
-      <div className="p-6 border-b border-white/5">
-        <h2 className="text-xl font-serif italic tracking-tight text-emerald-500">Kotbari Dawah Circle</h2>
+      <div className="p-6 border-b border-white/5 flex flex-col items-center justify-center">
+        {branding?.primaryLogo ? (
+          <img src={branding.primaryLogo} alt="Kotbari Dawah Circle" className="max-h-16 object-contain mb-2" />
+        ) : (
+          <h2 className="text-xl font-serif italic tracking-tight text-emerald-500">Kotbari Dawah Circle</h2>
+        )}
         <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-1">Dawah Chart</p>
       </div>
       <nav className="flex-1 p-4 space-y-1">
