@@ -1,0 +1,104 @@
+const fs = require('fs');
+let content = fs.readFileSync('src/pages/Dashboard.tsx', 'utf8');
+
+const importsToReplace = `import { ArrowRight, Flame, Target, UserPlus, TrendingUp, TrendingDown, Minus, Edit2 } from 'lucide-react';`;
+const newImports = `import { ArrowRight, Flame, Target, UserPlus, MessageCircle, ThumbsUp, PhoneCall, ArrowUpCircle, Home, Users, Sunrise, BookOpen, Library, Link as LinkIcon, Flag, TrendingUp, TrendingDown, Minus, Edit2, Heart, Megaphone, Star } from 'lucide-react';`;
+content = content.replace(importsToReplace, newImports);
+
+const stagesData = `
+  const BENGALI_STAGES = [
+    { title: "নতুন পরিচিতি", icon: UserPlus },
+    { title: "দাওয়াহ দেওয়া হয়েছে", icon: MessageCircle },
+    { title: "ইতিবাচক সাড়া", icon: ThumbsUp },
+    { title: "নিয়মিত যোগাযোগ", icon: PhoneCall },
+    { title: "সালাতের উন্নতি", icon: ArrowUpCircle },
+    { title: "মসজিদের সাথে সংযোগ", icon: Home },
+    { title: "জামাতে অংশগ্রহণ", icon: Users },
+    { title: "ফজরের সাথে সংযোগ", icon: Sunrise },
+    { title: "কুরআন ও দ্বীনি শিক্ষা", icon: BookOpen },
+    { title: "ইলমি মুহাজারা / পাঠচক্র", icon: Library },
+    { title: "দাওয়াহ সার্কেলের সাথে সংযোগ", icon: LinkIcon },
+    { title: "ফজর ক্যাম্পেইনে অংশগ্রহণ", icon: Flag },
+    { title: "ব্যক্তিগত আমলের উন্নতি", icon: TrendingUp },
+    { title: "চরিত্র ও পারিবারিক উন্নতি", icon: Heart },
+    { title: "দাওয়াহ কাজে অংশগ্রহণ", icon: Megaphone },
+    { title: "সক্রিয় দাওয়াহ কর্মী", icon: Star }
+  ];
+`;
+
+const replaceTarget = `      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-rose-500/5 border-rose-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-500">
+                <Flame className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-serif text-[#E5E5E7]">{highPriority.length}</p>
+                <p className="text-xs text-white/60">Urgent Follow-up</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-amber-500/5 border-amber-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500">
+                <Target className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-serif text-[#E5E5E7]">{needsAttention.length}</p>
+                <p className="text-xs text-white/60">Needs Attention</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-emerald-500/5 border-emerald-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-serif text-[#E5E5E7]">{growing.length}</p>
+                <p className="text-xs text-white/60">Growing</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-blue-500/5 border-blue-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500">
+                <Minus className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-serif text-[#E5E5E7]">{stable.length}</p>
+                <p className="text-xs text-white/60">Stable</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>`;
+
+const replaceWith = `        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          {BENGALI_STAGES.map((stage, idx) => {
+            const count = contacts.filter(c => c.currentStage === idx + 1).length;
+            const Icon = stage.icon;
+            return (
+              <div key={idx} className="group relative bg-[#121214]/80 backdrop-blur-md border border-white/5 rounded-xl p-4 flex flex-col items-center text-center hover:border-emerald-500/30 hover:bg-[#16161A] hover:-translate-y-1 transition-all duration-300 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)]">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300 group-hover:bg-emerald-500/20 text-emerald-500">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <h3 className="text-[11px] font-bold text-[#E5E5E7] mb-1 leading-tight">{stage.title}</h3>
+                <p className="text-[10px] text-white/40 font-mono">{count} Members</p>
+              </div>
+            );
+          })}
+        </div>`;
+
+content = content.replace(replaceTarget, stagesData + '\n' + replaceWith);
+fs.writeFileSync('src/pages/Dashboard.tsx', content);
