@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose, Input } from '../components/ui';
 import { Plus, Search, Edit2, Users, Check, Save, Image as ImageIcon, CheckSquare, Square, X, MapPin, Phone, MessageCircle, MoreVertical } from 'lucide-react';
 import { Contact } from '../types';
+import { apiFetch } from '../lib/api';
 
 export default function Categories() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -31,8 +32,8 @@ export default function Categories() {
       setLoading(true);
       setError(null);
       const [contRes, catRes] = await Promise.all([
-        fetch('/api/contacts'),
-        fetch('/api/custom-categories')
+        apiFetch('/api/contacts'),
+        apiFetch('/api/custom-categories')
       ]);
       if (!contRes.ok || !catRes.ok) throw new Error('API request failed');
       const contData = await contRes.json();
@@ -75,7 +76,7 @@ export default function Categories() {
       const url = isNew ? '/api/custom-categories' : `/api/custom-categories/${editCategory.id}`;
       const method = isNew ? 'POST' : 'PUT';
       
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editCategory)
@@ -108,7 +109,7 @@ export default function Categories() {
     if (!manageCategory) return;
     try {
       setSavingMembers(true);
-      const res = await fetch('/api/contacts/bulk-assign-category', {
+      const res = await apiFetch('/api/contacts/bulk-assign-category', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

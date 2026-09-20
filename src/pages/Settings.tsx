@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button } from '../components/ui';
 import { Settings as SettingsIcon, Download, Save, Shield, Moon, Bell, Image as ImageIcon, LayoutTemplate } from 'lucide-react';
 import { useBranding } from '../contexts/BrandingContext';
+import { apiFetch } from '../lib/api';
 
 export default function Settings() {
   const [exporting, setExporting] = useState(false);
@@ -38,7 +39,7 @@ export default function Settings() {
   const handleExport = async () => {
     try {
       setExporting(true);
-      const res = await fetch('/api/contacts');
+      const res = await apiFetch('/api/contacts');
       const data = await res.json();
       
       if (data && data.length > 0) {
@@ -79,7 +80,7 @@ export default function Settings() {
   const handleSaveBranding = async () => {
     try {
       setSavingBranding(true);
-      const res = await fetch('/api/branding', {
+      const res = await apiFetch('/api/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(brandingForm)

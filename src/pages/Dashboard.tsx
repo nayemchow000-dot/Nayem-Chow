@@ -4,6 +4,7 @@ import { Contact, STAGES } from '../types';
 import { ArrowRight, Flame, Target, UserPlus, MessageCircle, ThumbsUp, PhoneCall, ArrowUpCircle, Home, Users, Sunrise, BookOpen, Library, Link as LinkIcon, Flag, TrendingUp, TrendingDown, Minus, Edit2, Heart, Megaphone, Star } from 'lucide-react';
 import { Link } from 'react-router';
 import { useBranding } from '../contexts/BrandingContext';
+import { apiFetch } from '../lib/api';
 
   const BENGALI_STAGES = [
     { title: "নতুন পরিচিতি", icon: UserPlus },
@@ -16,7 +17,7 @@ import { useBranding } from '../contexts/BrandingContext';
     { title: "ফজরের সাথে সংযোগ", icon: Sunrise },
     { title: "কুরআন ও দ্বীনি শিক্ষা", icon: BookOpen },
     { title: "ইলমি মুহাজারা / পাঠচক্র", icon: Library },
-    { title: "দাওয়াহ সার্কেলের সাথে সংযোগ", icon: LinkIcon },
+    { title: "দাওয়াহ মুভমেন্টের সাথে সংযোগ", icon: LinkIcon },
     { title: "ফজর ক্যাম্পেইনে অংশগ্রহণ", icon: Flag },
     { title: "ব্যক্তিগত আমলের উন্নতি", icon: TrendingUp },
     { title: "চরিত্র ও পারিবারিক উন্নতি", icon: Heart },
@@ -35,7 +36,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/contacts');
+      const res = await apiFetch('/api/contacts');
       if (!res.ok) throw new Error('API request failed');
       const data = await res.json();
       if (Array.isArray(data)) {
@@ -57,7 +58,7 @@ export default function Dashboard() {
   }, []);
 
   const handleQuickUpdate = async (id: string, stage: number, priorityLevel: string, growthScore: number) => {
-    await fetch(`/api/contacts/${id}`, {
+    await apiFetch(`/api/contacts/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentStage: stage, priorityLevel, growthScore })

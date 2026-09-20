@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Tabs, TabsList, TabsTrigger, TabsContent, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose, Input } from '../components/ui';
 import { Contact, STAGES } from '../types';
+import { apiFetch } from '../lib/api';
 import { ArrowLeft, Edit, Calendar, Phone, MapPin, Activity, Target, BookOpen, Heart, Users, Star, MessageCircle, Home, Trash2 } from 'lucide-react';
 
 export default function ContactProfile() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'overview';
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +24,7 @@ export default function ContactProfile() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/contacts/${id}`);
+      const res = await apiFetch(`/api/contacts/${id}`);
       if (!res.ok) throw new Error('API request failed');
       const data = await res.json();
       
@@ -31,7 +34,7 @@ export default function ContactProfile() {
       setEditArea(data.area || '');
       
       // Fetch salah logs separately without blocking main profile load
-      fetch(`/api/contacts/${id}/salah`).then(r => {
+      apiFetch(`/api/contacts/${id}/salah`).then(r => {
         if (!r.ok) return [];
         return r.json();
       }).then(data => {
@@ -59,7 +62,7 @@ export default function ContactProfile() {
   const [logIsha, setLogIsha] = useState('missed');
 
   const handleLogSalah = async () => {
-    await fetch(`/api/contacts/${id}/salah`, {
+    await apiFetch(`/api/contacts/${id}/salah`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -76,7 +79,7 @@ export default function ContactProfile() {
 
   const handleUpdateProfile = async () => {
     if (!contact) return;
-    await fetch(`/api/contacts/${id}`, {
+    await apiFetch(`/api/contacts/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: editName, phone: editPhone, area: editArea })
@@ -181,7 +184,7 @@ export default function ContactProfile() {
                   variant="destructive" 
                   className="bg-rose-500 hover:bg-rose-600 text-white" 
                   onClick={async () => {
-                    await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
+                    await apiFetch(`/api/contacts/${id}`, { method: 'DELETE' });
                     window.location.href = '/contacts';
                   }}
                 >
@@ -193,7 +196,7 @@ export default function ContactProfile() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={(val) => setSearchParams({ tab: val })} className="w-full">
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="journey">Growth Journey</TabsTrigger>
@@ -338,7 +341,7 @@ export default function ContactProfile() {
                         value={contact.currentStage}
                         onChange={async (e) => {
                           const newStage = Number(e.target.value);
-                          await fetch(`/api/contacts/${id}`, {
+                          await apiFetch(`/api/contacts/${id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ currentStage: newStage })

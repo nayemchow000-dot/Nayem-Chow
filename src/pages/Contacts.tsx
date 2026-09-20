@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Dialog,
 import { Contact, STAGES } from '../types';
 import { Search, UserPlus, Filter, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
+import { apiFetch } from '../lib/api';
 
 export default function Contacts() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function Contacts() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/contacts');
+      const res = await apiFetch('/api/contacts');
       if (!res.ok) throw new Error('API request failed');
       const data = await res.json();
       if (Array.isArray(data)) {
@@ -39,6 +40,7 @@ export default function Contacts() {
     }
   };
 
+
   useEffect(() => {
     fetchContacts();
   }, []);
@@ -46,7 +48,7 @@ export default function Contacts() {
   const handleAddBrother = async () => {
     if (!newName.trim()) return;
     
-    await fetch('/api/contacts', {
+    await apiFetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -66,7 +68,7 @@ export default function Contacts() {
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/contacts/${id}`, {
+    await apiFetch(`/api/contacts/${id}`, {
       method: 'DELETE'
     });
     setContactToDelete(null);
@@ -193,71 +195,105 @@ export default function Contacts() {
             <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
               <thead className="bg-white/[0.03] text-white/40 text-[10px] uppercase tracking-wider">
                 <tr>
-                  <th className="px-6 py-4 font-medium">Name</th>
-                  <th className="px-6 py-4 font-medium">Current Stage</th>
-                  <th className="px-6 py-4 font-medium text-right">Growth</th>
-                  <th className="px-6 py-4 font-medium text-right">Weekly Change</th>
-                  <th className="px-6 py-4 font-medium text-right">Monthly Change</th>
-                  <th className="px-6 py-4 font-medium text-center">Last Contact</th>
-                  <th className="px-6 py-4 font-medium">Priority</th>
-                  <th className="px-6 py-4 font-medium text-right">Actions</th>
+                  <th className="px-5 py-4 font-medium">সদস্যের নাম</th>
+                  <th className="px-5 py-4 font-medium">ফোন ও ঠিকানা</th>
+                  <th className="px-5 py-4 font-medium">গ্রোথ স্টেজ (Growth Stage)</th>
+                  <th className="px-5 py-4 font-medium text-center">অগ্রগতি স্কোর</th>
+                  <th className="px-5 py-4 font-medium text-center">প্রায়োরিটি</th>
+                  <th className="px-5 py-4 font-medium text-right">অ্যাকশন বাটন সমূহ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center text-white/40">Loading contacts...</td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-white/40">Loading contacts...</td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center text-rose-500 bg-rose-500/5">{error}</td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-rose-500 bg-rose-500/5">{error}</td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center text-white/40">No contacts found.</td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-white/40">কোনো মেম্বার পাওয়া যায়নি।</td>
                   </tr>
                 ) : (
                   filtered.map(contact => (
-                    <tr key={contact.id} className="hover:bg-white/[0.02] transition-colors group cursor-pointer" onClick={() => navigate(`/contacts/${contact.id}`)}>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-[#E5E5E7] group-hover:text-emerald-500 transition-colors block">
+                    <tr key={contact.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-5 py-4">
+                        <Link to={`/contacts/${contact.id}`} className="font-semibold text-white hover:text-emerald-400 transition-colors block">
                           {contact.name}
+                        </Link>
+                        <div className="text-white/40 text-[11px] mt-0.5 font-mono">
+                          যুক্ত: {contact.firstContactDate || '২০২৬'}
                         </div>
-                        <div className="text-white/40 text-[10px] mt-0.5">{contact.area || 'Unknown area'}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/60">
-                          {STAGES[contact.currentStage - 1] || `Stage ${contact.currentStage}`}
+                      <td className="px-5 py-4">
+                        <div className="text-slate-300 font-mono text-xs">{contact.phone || '—'}</div>
+                        <div className="text-emerald-400/80 text-[11px] mt-0.5">{contact.area || 'এলাকা অনির্ধারিত'}</div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-300 font-medium max-w-xs truncate">
+                          {STAGES[contact.currentStage - 1] || `স্টেজ ${contact.currentStage}`}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right font-mono text-[#E5E5E7]">
-                        {contact.growthScore}%
+                      <td className="px-5 py-4 text-center">
+                        <div className="inline-flex flex-col items-center">
+                          <span className="font-bold text-white text-xs">{contact.growthScore || 0}%</span>
+                          <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+                            <div 
+                              className="bg-emerald-500 h-full rounded-full" 
+                              style={{ width: `${Math.min(100, Math.max(5, contact.growthScore || 0))}%` }}
+                            />
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-right font-mono">
-                        <span className={contact.weeklyChange > 0 ? 'text-emerald-500' : contact.weeklyChange < 0 ? 'text-rose-500' : 'text-white/60'}>
-                          {contact.weeklyChange > 0 ? '+' : ''}{contact.weeklyChange}%
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono">
-                        <span className={contact.monthlyChange > 0 ? 'text-emerald-500' : contact.monthlyChange < 0 ? 'text-rose-500' : 'text-white/60'}>
-                          {contact.monthlyChange > 0 ? '+' : ''}{contact.monthlyChange || 0}%
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center text-white/60 text-[10px] uppercase tracking-widest">
-                        {Math.random() > 0.5 ? 'Yesterday' : '3 Days Ago'}
-                      </td>
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-4 text-center">
                         <PriorityBadge level={contact.priorityLevel} />
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10"
-                          onClick={(e) => { e.stopPropagation(); setContactToDelete(contact.id); }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/60 rounded-lg"
+                            onClick={() => navigate(`/contacts/${contact.id}?tab=overview`)}
+                          >
+                            Overview
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/60 rounded-lg"
+                            onClick={() => navigate(`/contacts/${contact.id}?tab=journey`)}
+                          >
+                            Growth Journey
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/60 rounded-lg"
+                            onClick={() => navigate(`/contacts/${contact.id}?tab=salah`)}
+                          >
+                            Salah Tracking
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 rounded-lg"
+                            onClick={() => navigate(`/contacts/${contact.id}?tab=edit`)}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 w-7 p-0 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg ml-1"
+                            onClick={() => setContactToDelete(contact.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -272,45 +308,70 @@ export default function Contacts() {
             ) : error ? (
               <div className="p-8 text-center text-rose-500 bg-rose-500/5">{error}</div>
             ) : filtered.length === 0 ? (
-              <div className="p-8 text-center text-white/40">No contacts found.</div>
+              <div className="p-8 text-center text-white/40">কোনো মেম্বার পাওয়া যায়নি।</div>
             ) : (
               filtered.map(contact => (
                 <div 
                   key={contact.id} 
-                  className="p-4 flex flex-col gap-3 active:bg-white/5 cursor-pointer"
-                  onClick={() => navigate(`/contacts/${contact.id}`)}
+                  className="p-4 flex flex-col gap-3 bg-slate-900/40"
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="font-medium text-[#E5E5E7]">{contact.name}</div>
-                      <div className="text-white/40 text-[10px] mt-0.5">{contact.area || 'Unknown area'}</div>
+                      <div className="font-semibold text-white text-base">{contact.name}</div>
+                      <div className="text-emerald-400 text-xs font-mono mt-0.5">{contact.phone || 'ফোন নেই'} • {contact.area || 'এলাকা নেই'}</div>
                     </div>
                     <PriorityBadge level={contact.priorityLevel} />
                   </div>
                   
-                  <div className="flex justify-between items-end">
-                    <div className="flex flex-col gap-1">
-                      <span className="px-2 py-1 bg-white/5 border border-white/10 rounded w-fit text-[10px] text-white/60">
-                        {STAGES[contact.currentStage - 1] || `Stage ${contact.currentStage}`}
-                      </span>
-                      <div className="text-[10px] text-white/40">
-                        Growth: <span className="text-[#E5E5E7]">{contact.growthScore}%</span> 
-                        <span className="ml-2">Last: {Math.random() > 0.5 ? 'Yesterday' : '3 Days Ago'}</span>
+                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-slate-400">গ্রোথ স্টেজ:</div>
+                      <div className="text-xs font-medium text-emerald-300">
+                        {STAGES[contact.currentStage - 1] || `স্টেজ ${contact.currentStage}`}
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8 w-8 p-0 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10"
-                      onClick={(e) => { e.stopPropagation(); setContactToDelete(contact.id); }}
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-400">অগ্রগতি:</div>
+                      <div className="text-xs font-bold text-white">{contact.growthScore || 0}%</div>
+                    </div>
+                  </div>
+
+                  {/* Mobile Action Buttons */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
+                      onClick={() => navigate(`/contacts/${contact.id}?tab=overview`)}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                      Overview
+                    </button>
+                    <button
+                      type="button"
+                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
+                      onClick={() => navigate(`/contacts/${contact.id}?tab=journey`)}
+                    >
+                      Journey
+                    </button>
+                    <button
+                      type="button"
+                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
+                      onClick={() => navigate(`/contacts/${contact.id}?tab=salah`)}
+                    >
+                      Salah
+                    </button>
+                    <button
+                      type="button"
+                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 text-center"
+                      onClick={() => navigate(`/contacts/${contact.id}?tab=edit`)}
+                    >
+                      Edit
+                    </button>
                   </div>
                 </div>
               ))
             )}
           </div>
+
         </CardContent>
       </Card>
       

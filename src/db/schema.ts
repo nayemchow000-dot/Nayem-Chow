@@ -97,3 +97,27 @@ export const brandingSettings = pgTable('branding_settings', {
   cornerImage: text('corner_image'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const memberAccounts = pgTable('member_accounts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').default('member').notNull(), // 'admin' | 'member'
+  isActive: boolean('is_active').default(true).notNull(),
+
+  // Privacy & Public Sharing
+  isPublic: boolean('is_public').default(false).notNull(),
+  shareSlug: text('share_slug').unique(),
+  customBio: text('custom_bio'),
+  privacyProfileInfo: boolean('privacy_profile_info').default(true).notNull(),
+  privacyGrowthStage: boolean('privacy_growth_stage').default(true).notNull(),
+  privacyGrowthJourney: boolean('privacy_growth_journey').default(true).notNull(),
+  privacySalahTracking: boolean('privacy_salah_tracking').default(true).notNull(),
+  privacyActivities: boolean('privacy_activities').default(true).notNull(),
+  privacyPhone: boolean('privacy_phone').default(false).notNull(),
+  privacyArea: boolean('privacy_area').default(true).notNull(),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

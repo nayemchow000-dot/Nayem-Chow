@@ -66,20 +66,76 @@ export interface Observation {
 }
 
 export const STAGES = [
-  "New Contact",
-  "Dawah Given",
-  "Positive Response",
-  "Regular Conversation",
-  "Salah Improvement",
-  "Mosque Connection",
-  "Jama'ah Participation",
-  "Fajr Connection",
-  "Quran / Islamic Learning",
-  "Ilmi Muhajara / Study Circle",
-  "Dawah Circle Connection",
-  "Fajr Campaign",
-  "Personal Amal Development",
-  "Character / Family Improvement",
-  "Dawah Participation",
-  "Active Dawah Brother"
+  "নতুন পরিচিতি",
+  "দাওয়াহ দেওয়া হয়েছে",
+  "ইতিবাচক সাড়া",
+  "নিয়মিত যোগাযোগ",
+  "সালাতের উন্নতি",
+  "মসজিদের সাথে সংযোগ",
+  "জামাতে অংশগ্রহণ",
+  "ফজরের সাথে সংযোগ",
+  "কুরআন ও দ্বীনি শিক্ষা",
+  "ইলমি মুহাজারা / পাঠচক্র",
+  "দাওয়াহ মুভমেন্টের সাথে সংযোগ",
+  "ফজর ক্যাম্পেইনে অংশগ্রহণ",
+  "ব্যক্তিগত আমলের উন্নতি",
+  "চরিত্র ও পারিবারিক উন্নতি",
+  "দাওয়াহ কাজে অংশগ্রহণ",
+  "সক্রিয় দাওয়াহ কর্মী"
 ];
+
+export interface PrivacySettings {
+  isPublic: boolean;
+  shareSlug?: string | null;
+  customBio?: string | null;
+  privacyProfileInfo: boolean;
+  privacyGrowthStage: boolean;
+  privacyGrowthJourney: boolean;
+  privacySalahTracking: boolean;
+  privacyActivities: boolean;
+  privacyPhone: boolean;
+  privacyArea: boolean;
+}
+
+export interface MemberAccount extends PrivacySettings {
+  id: string;
+  contactId?: string | null;
+  username: string;
+  role: 'admin' | 'member';
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  contact?: Contact | null;
+}
+
+export interface PublicProfileData {
+  isPublic: boolean;
+  message?: string;
+  id?: string;
+  name?: string;
+  username?: string;
+  slug?: string;
+  customBio?: string | null;
+  photoUrl?: string | null;
+  area?: string | null;
+  phone?: string | null;
+  currentStage?: number;
+  stageName?: string;
+  growthScore?: number;
+  priorityLevel?: string;
+  weeklyChange?: number;
+  monthlyChange?: number;
+  categoryTags?: string[];
+  salahRecords?: SalahRecord[];
+  activities?: ActivityRecord[];
+  settings?: {
+    showProfileInfo: boolean;
+    showGrowthStage: boolean;
+    showGrowthJourney: boolean;
+    showSalahTracking: boolean;
+    showActivities: boolean;
+    showPhone: boolean;
+    showArea: boolean;
+  };
+}
+

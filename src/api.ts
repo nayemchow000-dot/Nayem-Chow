@@ -1,9 +1,30 @@
 import { Router } from 'express';
 import { db } from './db/db';
-import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings } from './db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings, memberAccounts } from './db/schema';
+import { eq, and, desc, inArray } from 'drizzle-orm';
+import { hashPassword, verifyPassword, generateToken, parseToken, TokenPayload } from './lib/auth';
+import { STAGES } from './types';
+import { syncMemberAccounts } from './lib/syncAccounts';
 
 export const apiRouter = Router();
+
+// Run self-healing sync once in background
+syncMemberAccounts().catch(e => console.error('[Auth Sync]', e));
+
+function getAuthUser(req: any): TokenPayload | null {
+  const authHeader = req.headers.authorization;
+  let token: string | null = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/kotbari_token=([^;]+)/);
+    if (match) {
+      token = decodeURIComponent(match[1]);
+    }
+  }
+  if (!token) return null;
+  return parseToken(token);
+}
 
 apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -88,6 +109,12 @@ apiRouter.post('/seed', async (req, res) => {
 
 apiRouter.get('/contacts', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    // If a regular member is logged in, only return their own contact to protect other members' privacy
+    if (authUser && authUser.role === 'member' && authUser.contactId) {
+      const myContact = await db.select().from(contacts).where(eq(contacts.id, authUser.contactId));
+      return res.json(myContact);
+    }
     const allContacts = await db.select().from(contacts).orderBy(desc(contacts.updatedAt));
     res.json(allContacts);
   } catch (error: any) {
@@ -98,6 +125,11 @@ apiRouter.get('/contacts', async (req, res) => {
 
 apiRouter.post('/contacts', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    // Regular members cannot create other contacts directly
+    if (authUser && authUser.role === 'member') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন নতুন মেম্বার যোগ করতে পারবেন।' });
+    }
     const newContact = await db.insert(contacts).values(req.body).returning();
     res.json(newContact[0]);
   } catch (error: any) {
@@ -108,6 +140,11 @@ apiRouter.post('/contacts', async (req, res) => {
 
 apiRouter.get('/contacts/:id', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    // If a regular member is logged in, prevent them from accessing other members' private profiles
+    if (authUser && authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+      return res.status(403).json({ error: 'অন্য কোনো মেম্বারের প্রাইভেট প্রোফাইল দেখার অনুমতি নেই।' });
+    }
     const contact = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
     if (!contact.length) return res.status(404).json({ error: 'Not found' });
     res.json(contact[0]);
@@ -119,6 +156,15 @@ apiRouter.get('/contacts/:id', async (req, res) => {
 
 apiRouter.put('/contacts/:id', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+    // Regular member can only update their own profile
+    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+      return res.status(403).json({ error: 'অন্য কোনো মেম্বারের তথ্য পরিবর্তনের অনুমতি নেই।' });
+    }
+
     const dataToUpdate = { ...req.body };
     delete dataToUpdate.id;
     delete dataToUpdate.createdAt;
@@ -137,6 +183,12 @@ apiRouter.put('/contacts/:id', async (req, res) => {
 
 apiRouter.delete('/contacts/:id', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    // Only admin can delete contacts
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন মেম্বার ডিলিট করতে পারবেন।' });
+    }
+
     const contactId = req.params.id;
     // Delete related records first to avoid foreign key constraints errors
     await db.delete(salahRecords).where(eq(salahRecords.contactId, contactId));
@@ -155,6 +207,10 @@ apiRouter.delete('/contacts/:id', async (req, res) => {
 
 apiRouter.get('/contacts/:id/salah', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    if (authUser && authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+      return res.status(403).json({ error: 'অন্য কোনো মেম্বারের সালাহ রেকর্ড দেখার অনুমতি নেই।' });
+    }
     const records = await db.select().from(salahRecords).where(eq(salahRecords.contactId, req.params.id));
     res.json(records);
   } catch (error: any) {
@@ -165,6 +221,14 @@ apiRouter.get('/contacts/:id/salah', async (req, res) => {
 
 apiRouter.post('/contacts/:id/salah', async (req, res) => {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+      return res.status(403).json({ error: 'অন্য কোনো মেম্বারের সালাহ রেকর্ড পরিবর্তনের অনুমতি নেই।' });
+    }
+
     const { date, fajr, dhuhr, asr, maghrib, isha } = req.body;
     const contactId = req.params.id;
     
@@ -315,3 +379,490 @@ apiRouter.post('/contacts/bulk-assign-category', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ==========================================
+// AUTHENTICATION & MULTI-USER SYSTEM ROUTES
+// ==========================================
+
+// Login with Username or Phone + Password
+apiRouter.post('/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'ইউজারনেম বা ফোন নম্বর এবং পাসওয়ার্ড আবশ্যক।' });
+    }
+
+    const cleanInput = String(username).trim();
+    const cleanPhone = cleanInput.replace(/[^0-9]/g, '');
+
+    const accounts = await db.select().from(memberAccounts);
+    let matched = accounts.find(a => a.username.toLowerCase() === cleanInput.toLowerCase());
+
+    if (!matched && cleanPhone.length >= 6) {
+      matched = accounts.find(a => a.username.replace(/[^0-9]/g, '') === cleanPhone);
+      if (!matched) {
+        const allContacts = await db.select().from(contacts);
+        const contactMatch = allContacts.find(c => (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
+        if (contactMatch) {
+          matched = accounts.find(a => a.contactId === contactMatch.id);
+        }
+      }
+    }
+
+    if (!matched || !matched.isActive) {
+      return res.status(401).json({ error: 'ইউজারনেম বা পাসওয়ার্ড সঠিক নয় অথবা একাউন্টটি নিষ্ক্রিয়।' });
+    }
+
+    const isMatch = verifyPassword(password, matched.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'পাসওয়ার্ড সঠিক নয়।' });
+    }
+
+    let contactData: any = null;
+    if (matched.contactId) {
+      const c = await db.select().from(contacts).where(eq(contacts.id, matched.contactId));
+      if (c.length > 0) contactData = c[0];
+    }
+
+    const token = generateToken({
+      userId: matched.id,
+      role: matched.role as 'admin' | 'member',
+      contactId: matched.contactId,
+      username: matched.username,
+    });
+
+    const { passwordHash, ...safeUser } = matched;
+    res.setHeader('Set-Cookie', `kotbari_token=${token}; Path=/; SameSite=Lax; Max-Age=2592000`);
+    res.json({
+      token,
+      user: {
+        ...safeUser,
+        contact: contactData,
+      }
+    });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Member Self-Registration
+apiRouter.post('/auth/register', async (req, res) => {
+  try {
+    const { name, phone, area, password } = req.body;
+    if (!name || !phone || !password) {
+      return res.status(400).json({ error: 'নাম, মোবাইল নম্বর এবং পাসওয়ার্ড আবশ্যক।' });
+    }
+    if (String(password).trim().length < 4) {
+      return res.status(400).json({ error: 'পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।' });
+    }
+
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    const cleanUsername = cleanPhone.length >= 6 ? cleanPhone : String(phone).trim();
+
+    // Check if account with that username already exists
+    const existing = await db.select().from(memberAccounts).where(eq(memberAccounts.username, cleanUsername));
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'এই মোবাইল নম্বর বা ইউজারনেম দিয়ে ইতোমধ্যে একাউন্ট খোলা আছে। অনুগ্রহ করে লগইন করুন।' });
+    }
+
+    // Check if an existing contact with this phone already exists in contacts
+    const allContacts = await db.select().from(contacts);
+    let contactId: string;
+    let contactData: any;
+
+    const matchedContact = allContacts.find(c => (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
+    if (matchedContact) {
+      contactId = matchedContact.id;
+      contactData = matchedContact;
+    } else {
+      const today = new Date().toISOString().split('T')[0];
+      const newContact = await db.insert(contacts).values({
+        name: String(name).trim(),
+        phone: String(phone).trim(),
+        area: area ? String(area).trim() : 'কোটবাড়ি',
+        currentStage: 1,
+        growthScore: 0,
+        weeklyChange: 0,
+        monthlyChange: 0,
+        priorityLevel: 'stable',
+        fajrTarget: false,
+        jummahTarget: false,
+        deeniyatTarget: false,
+        tafseerTarget: false,
+        categoryTags: [],
+        firstContactDate: today,
+      }).returning();
+      contactId = newContact[0].id;
+      contactData = newContact[0];
+    }
+
+    const passwordHash = hashPassword(password);
+    const slug = `brother-${contactId.substring(0, 8)}`;
+
+    const newAccount = await db.insert(memberAccounts).values({
+      contactId,
+      username: cleanUsername,
+      passwordHash,
+      role: 'member',
+      isActive: true,
+      isPublic: false,
+      shareSlug: slug,
+      customBio: `কোটবাড়ি দাওয়াহ মুভমেন্টের সদস্য: ${String(name).trim()}`,
+      privacyProfileInfo: true,
+      privacyGrowthStage: true,
+      privacyGrowthJourney: true,
+      privacySalahTracking: true,
+      privacyActivities: true,
+      privacyPhone: false,
+      privacyArea: true,
+    }).returning();
+
+    const token = generateToken({
+      userId: newAccount[0].id,
+      role: 'member',
+      contactId,
+      username: cleanUsername,
+    });
+
+    const { passwordHash: _, ...safeUser } = newAccount[0];
+    res.setHeader('Set-Cookie', `kotbari_token=${token}; Path=/; SameSite=Lax; Max-Age=2592000`);
+    res.json({
+      token,
+      user: {
+        ...safeUser,
+        contact: contactData,
+      }
+    });
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Current User Details
+apiRouter.get('/auth/me', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+
+    const accountRes = await db.select().from(memberAccounts).where(eq(memberAccounts.id, authUser.userId));
+    if (accountRes.length === 0 || !accountRes[0].isActive) {
+      return res.status(401).json({ error: 'একাউন্ট পাওয়া যায়নি।' });
+    }
+
+    const account = accountRes[0];
+    let contactData: any = null;
+    if (account.contactId) {
+      const c = await db.select().from(contacts).where(eq(contacts.id, account.contactId));
+      if (c.length > 0) contactData = c[0];
+    }
+
+    const { passwordHash, ...safeUser } = account;
+    res.json({
+      user: {
+        ...safeUser,
+        contact: contactData,
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Member Privacy Settings
+apiRouter.put('/auth/privacy', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Admins can update any member's privacy, regular members only their own
+    const targetUserId = (authUser.role === 'admin' && req.body.userId) ? req.body.userId : authUser.userId;
+    const {
+      isPublic,
+      shareSlug,
+      customBio,
+      privacyProfileInfo,
+      privacyGrowthStage,
+      privacyGrowthJourney,
+      privacySalahTracking,
+      privacyActivities,
+      privacyPhone,
+      privacyArea
+    } = req.body;
+
+    const updateData: any = { updatedAt: new Date() };
+    if (isPublic !== undefined) updateData.isPublic = !!isPublic;
+    if (shareSlug !== undefined && String(shareSlug).trim()) {
+      updateData.shareSlug = String(shareSlug).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    }
+    if (customBio !== undefined) updateData.customBio = customBio;
+    if (privacyProfileInfo !== undefined) updateData.privacyProfileInfo = !!privacyProfileInfo;
+    if (privacyGrowthStage !== undefined) updateData.privacyGrowthStage = !!privacyGrowthStage;
+    if (privacyGrowthJourney !== undefined) updateData.privacyGrowthJourney = !!privacyGrowthJourney;
+    if (privacySalahTracking !== undefined) updateData.privacySalahTracking = !!privacySalahTracking;
+    if (privacyActivities !== undefined) updateData.privacyActivities = !!privacyActivities;
+    if (privacyPhone !== undefined) updateData.privacyPhone = !!privacyPhone;
+    if (privacyArea !== undefined) updateData.privacyArea = !!privacyArea;
+
+    const updated = await db.update(memberAccounts)
+      .set(updateData)
+      .where(eq(memberAccounts.id, targetUserId))
+      .returning();
+
+    if (updated.length === 0) return res.status(404).json({ error: 'User not found' });
+    const { passwordHash, ...safe } = updated[0];
+    res.json(safe);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Password
+apiRouter.put('/auth/password', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।' });
+    }
+
+    const accountRes = await db.select().from(memberAccounts).where(eq(memberAccounts.id, authUser.userId));
+    if (accountRes.length === 0) return res.status(404).json({ error: 'একাউন্ট পাওয়া যায়নি।' });
+
+    if (currentPassword) {
+      const match = verifyPassword(currentPassword, accountRes[0].passwordHash);
+      if (!match) return res.status(400).json({ error: 'বর্তমান পাসওয়ার্ডটি সঠিক নয়।' });
+    }
+
+    const newHash = hashPassword(newPassword);
+    await db.update(memberAccounts)
+      .set({ passwordHash: newHash, updatedAt: new Date() })
+      .where(eq(memberAccounts.id, authUser.userId));
+
+    res.json({ message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// PUBLIC PROFILE VIEW (STRICT PRIVACY FILTERING)
+// ==========================================
+apiRouter.get('/public/profile/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const accounts = await db.select().from(memberAccounts);
+    const account = accounts.find(a => 
+      a.shareSlug === slug || 
+      a.id === slug || 
+      a.username === slug || 
+      (a.contactId && a.contactId === slug)
+    );
+
+    if (!account || !account.isActive) {
+      return res.status(404).json({ error: 'Member profile not found' });
+    }
+
+    // If member has set entire profile to private
+    if (!account.isPublic) {
+      return res.json({
+        isPublic: false,
+        message: 'এই প্রোফাইলটি বর্তমানে প্রাইভেট রয়েছে। শুধুমাত্র অথরাইজড মেম্বাররা দেখতে পারবেন।',
+        name: 'কোটবাড়ি দাওয়াহ মুভমেন্ট সদস্য',
+      });
+    }
+
+    let contactData: any = null;
+    if (account.contactId) {
+      const c = await db.select().from(contacts).where(eq(contacts.id, account.contactId));
+      if (c.length > 0) contactData = c[0];
+    }
+
+    const result: any = {
+      isPublic: true,
+      id: account.id,
+      username: account.username,
+      slug: account.shareSlug,
+      customBio: account.customBio,
+      settings: {
+        showProfileInfo: account.privacyProfileInfo,
+        showGrowthStage: account.privacyGrowthStage,
+        showGrowthJourney: account.privacyGrowthJourney,
+        showSalahTracking: account.privacySalahTracking,
+        showActivities: account.privacyActivities,
+        showPhone: account.privacyPhone,
+        showArea: account.privacyArea,
+      }
+    };
+
+    if (contactData) {
+      result.name = contactData.name;
+      result.photoUrl = contactData.photoUrl;
+
+      // Section 1: Profile basic info
+      if (account.privacyProfileInfo) {
+        if (account.privacyArea) result.area = contactData.area;
+        if (account.privacyPhone) result.phone = contactData.phone;
+      }
+
+      // Section 2: Growth Stage
+      if (account.privacyGrowthStage) {
+        result.currentStage = contactData.currentStage;
+        result.stageName = STAGES[contactData.currentStage - 1] || `Stage ${contactData.currentStage}`;
+        result.growthScore = contactData.growthScore;
+        result.priorityLevel = contactData.priorityLevel;
+        result.weeklyChange = contactData.weeklyChange;
+        result.monthlyChange = contactData.monthlyChange;
+      }
+
+      // Section 3: Growth Journey
+      if (account.privacyGrowthJourney) {
+        result.categoryTags = contactData.categoryTags;
+        result.firstContactDate = contactData.firstContactDate;
+      }
+
+      // Section 4: Salah Tracking
+      if (account.privacySalahTracking) {
+        const records = await db.select().from(salahRecords)
+          .where(eq(salahRecords.contactId, contactData.id))
+          .orderBy(desc(salahRecords.date))
+          .limit(7);
+        result.salahRecords = records;
+      }
+
+      // Section 5: Activities
+      if (account.privacyActivities) {
+        const memberActivities = await db.select().from(activityRecords)
+          .where(eq(activityRecords.contactId, contactData.id))
+          .orderBy(desc(activityRecords.date))
+          .limit(10);
+        result.activities = memberActivities;
+      }
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ADMIN PANEL: MEMBER ACCOUNTS MANAGEMENT
+// ==========================================
+
+apiRouter.get('/admin/accounts', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const accounts = await db.select().from(memberAccounts).orderBy(desc(memberAccounts.createdAt));
+    const allContacts = await db.select().from(contacts);
+    const contactMap = new Map(allContacts.map(c => [c.id, c]));
+
+    const result = accounts.map(a => {
+      const { passwordHash, ...safe } = a;
+      return {
+        ...safe,
+        contact: a.contactId ? contactMap.get(a.contactId) || null : null,
+      };
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/admin/accounts', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { username, password, role, contactId, isPublic, customBio } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const existing = await db.select().from(memberAccounts).where(eq(memberAccounts.username, String(username).trim()));
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    const passwordHash = hashPassword(password);
+    const shareSlug = `brother-${Math.random().toString(36).substring(2, 9)}`;
+
+    const newAcc = await db.insert(memberAccounts).values({
+      username: String(username).trim(),
+      passwordHash,
+      role: role === 'admin' ? 'admin' : 'member',
+      contactId: contactId || null,
+      isPublic: !!isPublic,
+      shareSlug,
+      customBio: customBio || null,
+    }).returning();
+
+    const { passwordHash: _, ...safe } = newAcc[0];
+    res.json(safe);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.put('/admin/accounts/:id', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { role, isActive, password, isPublic, contactId, customBio, shareSlug } = req.body;
+    const updateData: any = { updatedAt: new Date() };
+
+    if (role !== undefined) updateData.role = role;
+    if (isActive !== undefined) updateData.isActive = !!isActive;
+    if (isPublic !== undefined) updateData.isPublic = !!isPublic;
+    if (contactId !== undefined) updateData.contactId = contactId || null;
+    if (customBio !== undefined) updateData.customBio = customBio;
+    if (shareSlug !== undefined && String(shareSlug).trim()) {
+      updateData.shareSlug = String(shareSlug).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    }
+    if (password && String(password).trim()) {
+      updateData.passwordHash = hashPassword(password);
+    }
+
+    const updated = await db.update(memberAccounts)
+      .set(updateData)
+      .where(eq(memberAccounts.id, req.params.id))
+      .returning();
+
+    if (updated.length === 0) return res.status(404).json({ error: 'Account not found' });
+    const { passwordHash: _, ...safe } = updated[0];
+    res.json(safe);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.delete('/admin/accounts/:id', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    await db.delete(memberAccounts).where(eq(memberAccounts.id, req.params.id));
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+

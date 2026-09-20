@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose, Input, Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui';
 import { Calendar, Plus, Search, Sunrise, Moon, BookOpen, Users, Phone, MapPin, CheckSquare, Edit2, Target } from 'lucide-react';
 import { Contact } from '../types';
+import { apiFetch } from '../lib/api';
 
 
 const BENGALI_STAGES = [
@@ -16,7 +17,7 @@ const BENGALI_STAGES = [
   { title: "ফজরের সাথে সংযোগ", icon: Sunrise },
   { title: "কুরআন ও দ্বীনি শিক্ষা", icon: BookOpen },
   { title: "ইলমি মুহাজারা / পাঠচক্র", icon: BookOpen },
-  { title: "দাওয়াহ সার্কেলের সাথে সংযোগ", icon: Target },
+  { title: "দাওয়াহ মুভমেন্টের সাথে সংযোগ", icon: Target },
   { title: "ফজর ক্যাম্পেইনে অংশগ্রহণ", icon: Sunrise },
   { title: "ব্যক্তিগত আমলের উন্নতি", icon: Target },
   { title: "চরিত্র ও পারিবারিক উন্নতি", icon: Users },
@@ -42,8 +43,8 @@ export default function Activities() {
       setLoading(true);
       setError(null);
       const [actRes, contRes] = await Promise.all([
-        fetch('/api/activities'),
-        fetch('/api/contacts')
+        apiFetch('/api/activities'),
+        apiFetch('/api/contacts')
       ]);
       if (!actRes.ok || !contRes.ok) throw new Error('API request failed');
       const actData = await actRes.json();
@@ -65,7 +66,7 @@ export default function Activities() {
   }, []);
 
   const handleAddActivity = async () => {
-    await fetch('/api/activities', {
+    await apiFetch('/api/activities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activityType, date, notes })
@@ -75,7 +76,7 @@ export default function Activities() {
   };
 
   const toggleContactTarget = async (contact: Contact, targetKey: string, currentValue: boolean) => {
-    await fetch(`/api/contacts/${contact.id}`, {
+    await apiFetch(`/api/contacts/${contact.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [targetKey]: !currentValue })
