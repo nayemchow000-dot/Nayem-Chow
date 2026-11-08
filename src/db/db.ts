@@ -11,12 +11,43 @@ export const createPool = () => {
     const connectionString = process.env.DATABASE_URL;
     
     if (connectionString) {
-      global._postgresPool = new Pool({
-        connectionString,
+      // Robust connection handling for Supabase & other Postgres providers
+      let poolConfig: any = {
         max: 10,
         connectionTimeoutMillis: 15000,
-        ssl: { rejectUnauthorized: false }, // Essential for Supabase/Neon connections
-      });
+        ssl: { rejectUnauthorized: false },
+      };
+
+      try {
+        const urlObj = new URL(connectionString);
+        let username = decodeURIComponent(urlObj.username);
+        let password = decodeURIComponent(urlObj.password);
+
+        // Extract tenant ID if username is formatted as postgres.[tenant]
+        let tenantId = '';
+        if (username.startsWith('postgres.') && username.length > 9) {
+          tenantId = username.substring(9);
+        }
+
+        // For Supabase poolers (aws-0-*.pooler.supabase.com), Supabase pooler requires SNI hostname
+        // to correctly route tenant connections when TLS is initiated
+        if (urlObj.hostname.includes('pooler.supabase.com') && tenantId) {
+          poolConfig.ssl = {
+            rejectUnauthorized: false,
+            servername: `db.${tenantId}.supabase.co`
+          };
+        }
+
+        poolConfig.host = urlObj.hostname;
+        poolConfig.port = urlObj.port ? parseInt(urlObj.port, 10) : 5432;
+        poolConfig.user = username;
+        poolConfig.password = password;
+        poolConfig.database = urlObj.pathname ? urlObj.pathname.replace(/^\//, '') : 'postgres';
+      } catch (e) {
+        poolConfig.connectionString = connectionString;
+      }
+
+      global._postgresPool = new Pool(poolConfig);
     } else {
       global._postgresPool = new Pool({
         host: process.env.SQL_HOST,
