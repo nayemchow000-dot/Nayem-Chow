@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, User, KeyRound, ShieldCheck, CheckCircle2, ArrowRight, Eye, EyeOff, Sparkles, UserPlus, MapPin, Phone } from 'lucide-react';
+import { Lock, User, KeyRound, ShieldCheck, CheckCircle2, ArrowRight, Eye, EyeOff, UserPlus, MapPin, Phone } from 'lucide-react';
 
 export default function Login() {
   const { login, register, user } = useAuth();
@@ -74,13 +74,6 @@ export default function Login() {
     } else {
       setError(result.error || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে। অন্য নম্বর দিয়ে চেষ্টা করুন।');
     }
-  };
-
-  const handleQuickFill = (u: string, p: string) => {
-    setActiveTab('login');
-    setUsername(u);
-    setPassword(p);
-    setError('');
   };
 
   return (
@@ -303,64 +296,6 @@ export default function Login() {
               </button>
             </form>
           )}
-
-          {/* Quick Demo Credentials Switcher */}
-          <div className="mt-5 pt-4 border-t border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2.5 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>ডেমো লগইন বাটন (Quick Fill):</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickFill('admin', 'admin123')}
-                className="text-left p-2 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-950/20 transition-all text-xs group"
-              >
-                <div className="font-semibold text-emerald-400 group-hover:text-emerald-300 flex items-center justify-between">
-                  <span>সুপার অ্যাডমিন</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">Admin</span>
-                </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">user: admin / pass: admin123</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickFill('01869090345', '123456')}
-                className="text-left p-2 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-950/20 transition-all text-xs group"
-              >
-                <div className="font-semibold text-emerald-400 group-hover:text-emerald-300 flex items-center justify-between">
-                  <span>নাঈম ভাই</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">Admin</span>
-                </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">user: 01869090345 / pass: 123456</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickFill('01866758152', '123456')}
-                className="text-left p-2 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-950/20 transition-all text-xs group"
-              >
-                <div className="font-semibold text-slate-200 group-hover:text-emerald-300 flex items-center justify-between">
-                  <span>জাকারিয়া ভাই</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">Member</span>
-                </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">user: 01866758152 / pass: 123456</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickFill('01622710660', '123456')}
-                className="text-left p-2 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-950/20 transition-all text-xs group"
-              >
-                <div className="font-semibold text-slate-200 group-hover:text-emerald-300 flex items-center justify-between">
-                  <span>আশিক ভাই</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">Member</span>
-                </div>
-                <div className="text-slate-400 text-[10px] mt-0.5">user: 01622710660 / pass: 123456</div>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Security Notice */}
