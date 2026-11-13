@@ -1,15 +1,18 @@
 import { Router } from 'express';
-import { db } from './db/db';
-import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings, memberAccounts } from './db/schema';
+import { db, ensureAiTables } from './db/db';
+import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings, memberAccounts, aiVoiceEntries, memberAiInsights } from './db/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { hashPassword, verifyPassword, generateToken, parseToken, TokenPayload } from './lib/auth';
 import { STAGES } from './types';
 import { syncMemberAccounts } from './lib/syncAccounts';
+import { transcribeBengaliAudio, analyzeVoiceNoteForMember, generateGapAnalysisAndGuidance, chatWithDawahAssistant } from './lib/ai';
 
 export const apiRouter = Router();
 
-// Run self-healing sync once in background
-syncMemberAccounts().catch(e => console.error('[Auth Sync]', e));
+// Run non-destructive AI table initialization and self-healing sync once in background
+ensureAiTables()
+  .then(() => syncMemberAccounts())
+  .catch(e => console.error('[Init Sync]', e));
 
 function getAuthUser(req: any): TokenPayload | null {
   const authHeader = req.headers.authorization;
@@ -865,4 +868,706 @@ apiRouter.delete('/admin/accounts/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ==========================================
+// GLOBAL SEARCH (NAME OR CATEGORY)
+// ==========================================
+apiRouter.get('/search', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const [allContacts, allCategories] = await Promise.all([
+      authUser.role === 'member' && authUser.contactId
+        ? db.select().from(contacts).where(eq(contacts.id, authUser.contactId))
+        : db.select().from(contacts).orderBy(desc(contacts.updatedAt)),
+      db.select().from(customCategories),
+    ]);
+
+    const catMap = new Map(allCategories.map(c => [c.name.toLowerCase(), c]));
+    const matchingCategoryNames = new Set(
+      allCategories
+        .filter(c =>
+          c.name.toLowerCase().includes(q) ||
+          (c.banglaName && c.banglaName.toLowerCase().includes(q))
+        )
+        .map(c => c.name.toLowerCase())
+    );
+
+    const results = allContacts
+      .filter(c => {
+        if (!q) return true;
+        const nameMatch = c.name.toLowerCase().includes(q);
+        const areaMatch = (c.area || '').toLowerCase().includes(q);
+        const phoneMatch = (c.phone || '').toLowerCase().includes(q);
+        const stageName = (STAGES[(c.currentStage || 1) - 1] || '').toLowerCase();
+        const stageMatch = stageName.includes(q);
+        const tags = Array.isArray(c.categoryTags) ? c.categoryTags : [];
+        const tagMatch = tags.some(tag => {
+          const lower = tag.toLowerCase();
+          return lower.includes(q) || matchingCategoryNames.has(lower);
+        });
+        return nameMatch || areaMatch || phoneMatch || stageMatch || tagMatch;
+      })
+      .slice(0, 15)
+      .map(c => {
+        const tags = Array.isArray(c.categoryTags) ? c.categoryTags : [];
+        const resolvedCategories = tags.map(t => {
+          const cat = catMap.get(t.toLowerCase());
+          return cat ? (cat.banglaName || cat.name) : t;
+        });
+        return {
+          id: c.id,
+          name: c.name,
+          area: c.area,
+          phone: c.phone,
+          currentStage: c.currentStage,
+          stageName: STAGES[(c.currentStage || 1) - 1] || `Stage ${c.currentStage}`,
+          priorityLevel: c.priorityLevel,
+          categories: resolvedCategories,
+        };
+      });
+
+    res.json(results);
+  } catch (err: any) {
+    console.error('[Search Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// FOLLOW-UPS & REMINDERS SYSTEM
+// ==========================================
+apiRouter.get('/contacts/:id/follow-ups', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+      return res.status(403).json({ error: 'অনুমতি নেই।' });
+    }
+
+    const items = await db.select().from(followUps)
+      .where(eq(followUps.contactId, req.params.id))
+      .orderBy(desc(followUps.date), desc(followUps.createdAt));
+
+    res.json(items);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/contacts/:id/follow-ups', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন ফলো-আপ ও রিমাইন্ডার যোগ করতে পারবেন।' });
+    }
+
+    const { date, durationMinutes, topic, response, nextAction, nextActionDate, assignedTo, reminderNote } = req.body;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const created = await db.insert(followUps).values({
+      contactId: req.params.id,
+      date: date || todayStr,
+      durationMinutes: durationMinutes ? Number(durationMinutes) : 0,
+      topic: topic || null,
+      response: response || null,
+      nextAction: nextAction || reminderNote || null,
+      nextActionDate: nextActionDate || null,
+      assignedTo: assignedTo || null,
+      reminderNote: reminderNote || nextAction || null,
+      isCompleted: false,
+    }).returning();
+
+    res.json(created[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.put('/follow-ups/:followUpId', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { isCompleted, nextActionDate, assignedTo, reminderNote, nextAction, topic, response } = req.body;
+    const updateData: any = {};
+    if (isCompleted !== undefined) {
+      updateData.isCompleted = !!isCompleted;
+      updateData.completedAt = isCompleted ? new Date() : null;
+    }
+    if (nextActionDate !== undefined) updateData.nextActionDate = nextActionDate || null;
+    if (assignedTo !== undefined) updateData.assignedTo = assignedTo || null;
+    if (reminderNote !== undefined) updateData.reminderNote = reminderNote || null;
+    if (nextAction !== undefined) updateData.nextAction = nextAction || null;
+    if (topic !== undefined) updateData.topic = topic || null;
+    if (response !== undefined) updateData.response = response || null;
+
+    const updated = await db.update(followUps)
+      .set(updateData)
+      .where(eq(followUps.id, req.params.followUpId))
+      .returning();
+
+    if (updated.length === 0) return res.status(404).json({ error: 'Follow-up not found' });
+    res.json(updated[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.delete('/follow-ups/:followUpId', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    await db.delete(followUps).where(eq(followUps.id, req.params.followUpId));
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// AI VOICE INPUT, MATCHING, APPROVAL & AUDIT
+// ==========================================
+
+// 1. Transcribe Bengali voice note audio
+apiRouter.post('/ai/transcribe', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন ভয়েস ইনপুট ব্যবহার করতে পারবেন।' });
+    }
+
+    const { audioBase64, mimeType } = req.body;
+    if (!audioBase64) {
+      return res.status(400).json({ error: 'অডিও ডাটা পাওয়া যায়নি।' });
+    }
+
+    const transcription = await transcribeBengaliAudio(audioBase64, mimeType || 'audio/webm');
+    res.json({ transcription });
+  } catch (err: any) {
+    console.error('[AI Transcribe Error]', err);
+    res.status(500).json({ error: err.message || 'ভয়েস ট্রান্সক্রিপশনে সমস্যা হয়েছে।' });
+  }
+});
+
+// 2. Analyze Bengali text against real DB categories & create PENDING review record (does NOT modify member!)
+apiRouter.post('/ai/analyze-voice', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন AI বিশ্লেষণ চালাতে পারবেন।' });
+    }
+
+    const { contactId, transcription, originalTranscription } = req.body;
+    if (!contactId || !transcription || !String(transcription).trim()) {
+      return res.status(400).json({ error: 'মেম্বার আইডি এবং বাংলা নোট আবশ্যক।' });
+    }
+
+    const [contactRows, allCategories, existingObs] = await Promise.all([
+      db.select().from(contacts).where(eq(contacts.id, contactId)),
+      db.select().from(customCategories).orderBy(desc(customCategories.displayOrder)),
+      db.select().from(observations).where(eq(observations.contactId, contactId)).orderBy(desc(observations.date)).limit(15),
+    ]);
+
+    if (contactRows.length === 0) {
+      return res.status(404).json({ error: 'মেম্বার খুঁজে পাওয়া যায়নি।' });
+    }
+
+    const contact = contactRows[0];
+    const analysis = await analyzeVoiceNoteForMember({
+      contact,
+      categories: allCategories,
+      existingObservations: existingObs,
+      transcription: String(transcription).trim(),
+    });
+
+    const currentTags = new Set((contact.categoryTags || []).map(t => t.toLowerCase()));
+    const existingIndicators = allCategories
+      .filter(c => currentTags.has(c.name.toLowerCase()))
+      .map(c => ({ id: c.id, name: c.name, banglaName: c.banglaName }));
+
+    const pendingEntry = await db.insert(aiVoiceEntries).values({
+      contactId: contact.id,
+      adminUserId: authUser.userId,
+      adminUsername: authUser.username,
+      originalTranscription: String(originalTranscription || transcription).trim(),
+      editedTranscription: String(transcription).trim(),
+      aiObservations: analysis.observations,
+      existingIndicators,
+      suggestedIndicators: analysis.suggestedCategories,
+      uncertainObservations: analysis.uncertainObservations,
+      indicatorUpdates: analysis.indicatorUpdates,
+      status: 'pending',
+    }).returning();
+
+    res.json({
+      entry: pendingEntry[0],
+      member: {
+        id: contact.id,
+        name: contact.name,
+        area: contact.area,
+        currentStage: contact.currentStage,
+        priorityLevel: contact.priorityLevel,
+        categoryTags: contact.categoryTags || [],
+      },
+      allCategories: allCategories.filter(c => c.isActive !== false),
+    });
+  } catch (err: any) {
+    console.error('[AI Analyze Voice Error]', err);
+    res.status(500).json({ error: err.message || 'AI বিশ্লেষণে সমস্যা হয়েছে।' });
+  }
+});
+
+// 3. Explicit Admin Approval — only NOW write validated updates + audit log + Gap Analysis & Guidance
+apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন অনুমোদন (Approve) করতে পারবেন।' });
+    }
+
+    const entryRows = await db.select().from(aiVoiceEntries).where(eq(aiVoiceEntries.id, req.params.entryId));
+    if (entryRows.length === 0) {
+      return res.status(404).json({ error: 'AI রিভিউ রেকর্ড পাওয়া যায়নি।' });
+    }
+    const entry = entryRows[0];
+    if (entry.status === 'approved') {
+      return res.status(400).json({ error: 'এই রেকর্ডটি ইতোমধ্যে অনুমোদিত হয়েছে।' });
+    }
+
+    const {
+      editedTranscription,
+      approvedCategoryIds = [],
+      approvedObservations = [],
+      applyStage,
+      applyPriority,
+      fajrTarget,
+      jummahTarget,
+      deeniyatTarget,
+      tafseerTarget,
+    } = req.body;
+
+    const [contactRows, allCategories] = await Promise.all([
+      db.select().from(contacts).where(eq(contacts.id, entry.contactId)),
+      db.select().from(customCategories),
+    ]);
+
+    if (contactRows.length === 0) {
+      return res.status(404).json({ error: 'মেম্বার খুঁজে পাওয়া যায়নি।' });
+    }
+    const contact = contactRows[0];
+
+    // Validate approved category IDs strictly against real DB categories
+    const catById = new Map(allCategories.map(c => [c.id, c]));
+    const validatedCategoryIds: string[] = [];
+    const existingTags: string[] = Array.isArray(contact.categoryTags) ? [...contact.categoryTags] : [];
+    const existingLower = new Set(existingTags.map(t => t.toLowerCase()));
+
+    for (const catId of Array.isArray(approvedCategoryIds) ? approvedCategoryIds : []) {
+      const cat = catById.get(String(catId));
+      if (cat) {
+        validatedCategoryIds.push(cat.id);
+        if (!existingLower.has(cat.name.toLowerCase())) {
+          existingTags.push(cat.name);
+          existingLower.add(cat.name.toLowerCase());
+        }
+      }
+    }
+
+    const contactUpdate: any = {
+      categoryTags: existingTags,
+      updatedAt: new Date(),
+    };
+    if (typeof applyStage === 'number' && applyStage >= 1 && applyStage <= 16) {
+      contactUpdate.currentStage = applyStage;
+    }
+    if (applyPriority && ['growing', 'stable', 'needs_attention', 'high_priority'].includes(applyPriority)) {
+      contactUpdate.priorityLevel = applyPriority;
+    }
+    if (typeof fajrTarget === 'boolean') contactUpdate.fajrTarget = fajrTarget;
+    if (typeof jummahTarget === 'boolean') contactUpdate.jummahTarget = jummahTarget;
+    if (typeof deeniyatTarget === 'boolean') contactUpdate.deeniyatTarget = deeniyatTarget;
+    if (typeof tafseerTarget === 'boolean') contactUpdate.tafseerTarget = tafseerTarget;
+
+    const updatedContacts = await db.update(contacts)
+      .set(contactUpdate)
+      .where(eq(contacts.id, contact.id))
+      .returning();
+    const updatedContact = updatedContacts[0];
+
+    // Save approved observations into observations table for auditability
+    const todayStr = new Date().toISOString().split('T')[0];
+    const obsList: string[] = Array.isArray(approvedObservations) && approvedObservations.length > 0
+      ? approvedObservations.map(String).filter(Boolean)
+      : (entry.aiObservations || []);
+
+    if (obsList.length > 0) {
+      await db.insert(observations).values(
+        obsList.map(text => ({
+          contactId: contact.id,
+          category: 'AI Voice Note',
+          observation: text,
+          level: 'observed',
+          date: todayStr,
+        }))
+      );
+    }
+
+    const approvedChanges = {
+      addedCategories: validatedCategoryIds.map(id => catById.get(id)?.banglaName || catById.get(id)?.name || id),
+      currentStage: contactUpdate.currentStage || contact.currentStage,
+      priorityLevel: contactUpdate.priorityLevel || contact.priorityLevel,
+      observationsCount: obsList.length,
+    };
+
+    const updatedEntryRows = await db.update(aiVoiceEntries)
+      .set({
+        editedTranscription: editedTranscription ? String(editedTranscription).trim() : entry.editedTranscription,
+        approvedCategoryIds: validatedCategoryIds,
+        approvedChanges,
+        status: 'approved',
+        approvedAt: new Date(),
+        updatedAt: new Date(),
+        adminUserId: authUser.userId,
+        adminUsername: authUser.username,
+      })
+      .where(eq(aiVoiceEntries.id, entry.id))
+      .returning();
+
+    // Generate & persist Gap Analysis and Personalized Dawah Guidance after approval
+    const [allObs, salahList, followUpList, actList] = await Promise.all([
+      db.select().from(observations).where(eq(observations.contactId, contact.id)).orderBy(desc(observations.date)),
+      db.select().from(salahRecords).where(eq(salahRecords.contactId, contact.id)).orderBy(desc(salahRecords.date)).limit(14),
+      db.select().from(followUps).where(eq(followUps.contactId, contact.id)).orderBy(desc(followUps.date)).limit(10),
+      db.select().from(activityRecords).where(eq(activityRecords.contactId, contact.id)).orderBy(desc(activityRecords.date)).limit(10),
+    ]);
+
+    let insightsRecord: any = null;
+    try {
+      const insights = await generateGapAnalysisAndGuidance({
+        contact: updatedContact,
+        categories: allCategories,
+        observations: allObs,
+        salahRecords: salahList,
+        followUps: followUpList,
+        activityRecords: actList,
+      });
+
+      const existingInsight = await db.select().from(memberAiInsights).where(eq(memberAiInsights.contactId, contact.id));
+      if (existingInsight.length > 0) {
+        const resIns = await db.update(memberAiInsights)
+          .set({
+            sourceEntryId: entry.id,
+            gapAnalysis: insights.gapAnalysis,
+            dawahGuidance: insights.dawahGuidance,
+            updatedAt: new Date(),
+          })
+          .where(eq(memberAiInsights.contactId, contact.id))
+          .returning();
+        insightsRecord = resIns[0];
+      } else {
+        const resIns = await db.insert(memberAiInsights).values({
+          contactId: contact.id,
+          sourceEntryId: entry.id,
+          gapAnalysis: insights.gapAnalysis,
+          dawahGuidance: insights.dawahGuidance,
+        }).returning();
+        insightsRecord = resIns[0];
+      }
+    } catch (insightErr) {
+      console.error('[Post-Approval Insights Warning]', insightErr);
+    }
+
+    res.json({
+      success: true,
+      entry: updatedEntryRows[0],
+      contact: updatedContact,
+      insights: insightsRecord,
+    });
+  } catch (err: any) {
+    console.error('[AI Approve Voice Error]', err);
+    res.status(500).json({ error: err.message || 'অনুমোদন সংরক্ষণে সমস্যা হয়েছে।' });
+  }
+});
+
+// 4. Cancel a pending AI review
+apiRouter.post('/ai/voice-entries/:entryId/cancel', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const updated = await db.update(aiVoiceEntries)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(aiVoiceEntries.id, req.params.entryId))
+      .returning();
+
+    if (updated.length === 0) return res.status(404).json({ error: 'Entry not found' });
+    res.json({ success: true, entry: updated[0] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Voice audit history for a member
+apiRouter.get('/contacts/:id/voice-history', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const entries = await db.select().from(aiVoiceEntries)
+      .where(eq(aiVoiceEntries.contactId, req.params.id))
+      .orderBy(desc(aiVoiceEntries.createdAt));
+
+    res.json(entries);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Get member AI Gap Analysis & Personalized Dawah Guidance + Observations
+apiRouter.get('/contacts/:id/insights', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+      return res.status(403).json({ error: 'অনুমতি নেই।' });
+    }
+
+    const [insightRows, obsRows, catRows] = await Promise.all([
+      db.select().from(memberAiInsights).where(eq(memberAiInsights.contactId, req.params.id)),
+      db.select().from(observations).where(eq(observations.contactId, req.params.id)).orderBy(desc(observations.date), desc(observations.createdAt)),
+      db.select().from(customCategories),
+    ]);
+
+    res.json({
+      insights: insightRows[0] || null,
+      observations: obsRows,
+      categories: catRows,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Refresh/Generate Gap Analysis & Dawah Guidance for any member
+apiRouter.post('/contacts/:id/insights/refresh', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন AI বিশ্লেষণ তৈরি বা আপডেট করতে পারবেন।' });
+    }
+
+    const contactId = req.params.id;
+    const [contactRows, allCategories, allObs, salahList, followUpList, actList] = await Promise.all([
+      db.select().from(contacts).where(eq(contacts.id, contactId)),
+      db.select().from(customCategories),
+      db.select().from(observations).where(eq(observations.contactId, contactId)).orderBy(desc(observations.date)),
+      db.select().from(salahRecords).where(eq(salahRecords.contactId, contactId)).orderBy(desc(salahRecords.date)).limit(14),
+      db.select().from(followUps).where(eq(followUps.contactId, contactId)).orderBy(desc(followUps.date)).limit(10),
+      db.select().from(activityRecords).where(eq(activityRecords.contactId, contactId)).orderBy(desc(activityRecords.date)).limit(10),
+    ]);
+
+    if (contactRows.length === 0) return res.status(404).json({ error: 'Member not found' });
+
+    const generated = await generateGapAnalysisAndGuidance({
+      contact: contactRows[0],
+      categories: allCategories,
+      observations: allObs,
+      salahRecords: salahList,
+      followUps: followUpList,
+      activityRecords: actList,
+    });
+
+    const existing = await db.select().from(memberAiInsights).where(eq(memberAiInsights.contactId, contactId));
+    let saved;
+    if (existing.length > 0) {
+      const updated = await db.update(memberAiInsights)
+        .set({
+          gapAnalysis: generated.gapAnalysis,
+          dawahGuidance: generated.dawahGuidance,
+          updatedAt: new Date(),
+        })
+        .where(eq(memberAiInsights.contactId, contactId))
+        .returning();
+      saved = updated[0];
+    } else {
+      const inserted = await db.insert(memberAiInsights).values({
+        contactId,
+        gapAnalysis: generated.gapAnalysis,
+        dawahGuidance: generated.dawahGuidance,
+      }).returning();
+      saved = inserted[0];
+    }
+
+    res.json({ insights: saved });
+  } catch (err: any) {
+    console.error('[Refresh Insights Error]', err);
+    res.status(500).json({ error: err.message || 'AI বিশ্লেষণ তৈরি করতে সমস্যা হয়েছে।' });
+  }
+});
+
+// ==========================================
+// ADMIN AI DASHBOARD AGGREGATION
+// ==========================================
+apiRouter.get('/ai/dashboard', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = getAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const [allContacts, allEntries, allFollowUps, allObs, allCats] = await Promise.all([
+      db.select().from(contacts).orderBy(desc(contacts.updatedAt)),
+      db.select().from(aiVoiceEntries).orderBy(desc(aiVoiceEntries.createdAt)).limit(50),
+      db.select().from(followUps).orderBy(desc(followUps.createdAt)),
+      db.select().from(observations).orderBy(desc(observations.createdAt)).limit(25),
+      db.select().from(customCategories),
+    ]);
+
+    const contactMap = new Map(allContacts.map(c => [c.id, c]));
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const pendingApprovals = allEntries
+      .filter(e => e.status === 'pending')
+      .map(e => ({
+        ...e,
+        memberName: contactMap.get(e.contactId)?.name || 'Unknown Member',
+        memberArea: contactMap.get(e.contactId)?.area || null,
+      }));
+
+    const recentlyUpdatedVoice = allEntries
+      .filter(e => e.status === 'approved')
+      .slice(0, 10)
+      .map(e => ({
+        ...e,
+        memberName: contactMap.get(e.contactId)?.name || 'Unknown Member',
+        memberStage: contactMap.get(e.contactId)?.currentStage || 1,
+      }));
+
+    const upcomingReminders = allFollowUps
+      .filter(f => !f.isCompleted && f.nextActionDate && f.nextActionDate >= todayStr)
+      .sort((a, b) => (a.nextActionDate || '').localeCompare(b.nextActionDate || ''))
+      .map(f => ({
+        ...f,
+        memberName: contactMap.get(f.contactId)?.name || 'Unknown Member',
+        memberPhone: contactMap.get(f.contactId)?.phone || null,
+      }));
+
+    const overdueFollowUps = allFollowUps
+      .filter(f => !f.isCompleted && f.nextActionDate && f.nextActionDate < todayStr)
+      .sort((a, b) => (a.nextActionDate || '').localeCompare(b.nextActionDate || ''))
+      .map(f => ({
+        ...f,
+        memberName: contactMap.get(f.contactId)?.name || 'Unknown Member',
+        memberPhone: contactMap.get(f.contactId)?.phone || null,
+      }));
+
+    const priorityFollowUpMembers = allContacts
+      .filter(c => c.priorityLevel === 'high_priority' || c.priorityLevel === 'needs_attention')
+      .slice(0, 12);
+
+    const recentObservations = allObs.map(o => ({
+      ...o,
+      memberName: contactMap.get(o.contactId)?.name || 'Unknown Member',
+    }));
+
+    const obsContactIds = new Set(allObs.map(o => o.contactId));
+    const incompleteInfoMembers = allContacts
+      .map(c => {
+        const missingFields: string[] = [];
+        if (!c.phone) missingFields.push('ফোন নম্বর');
+        if (!c.area) missingFields.push('এলাকা');
+        if (!c.categoryTags || c.categoryTags.length === 0) missingFields.push('ক্যাটাগরি/ইনডিকেটর');
+        if (!obsContactIds.has(c.id)) missingFields.push('সাম্প্রতিক পর্যবেক্ষণ');
+        return {
+          id: c.id,
+          name: c.name,
+          area: c.area,
+          currentStage: c.currentStage,
+          missingFields,
+        };
+      })
+      .filter(m => m.missingFields.length > 0)
+      .slice(0, 15);
+
+    res.json({
+      recentlyUpdatedVoice,
+      pendingApprovals,
+      overdueFollowUps,
+      upcomingReminders,
+      priorityFollowUpMembers,
+      recentObservations,
+      incompleteInfoMembers,
+      allCategories: allCats,
+    });
+  } catch (err: any) {
+    console.error('[AI Dashboard Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// MULTI-TURN GEMINI DAWAH CHATBOT
+// ==========================================
+apiRouter.post('/ai/chat', async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'চ্যাট ব্যবহার করতে অনুগ্রহ করে লগইন করুন।' });
+    }
+
+    const { message, history = [], modelMode = 'standard', contactId } = req.body;
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({ error: 'বার্তা খালি রাখা যাবে না।' });
+    }
+
+    let contextSummary = '';
+    if (contactId && (authUser.role === 'admin' || authUser.contactId === contactId)) {
+      const cRows = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (cRows.length > 0) {
+        const c = cRows[0];
+        contextSummary = `বর্তমান নির্বাচিত সদস্য: ${c.name}, স্টেজ: ${c.currentStage}/16 (${STAGES[(c.currentStage || 1) - 1] || ''}), এলাকা: ${c.area || 'অজানা'}, ক্যাটাগরি: ${(c.categoryTags || []).join(', ') || 'নেই'}`;
+      }
+    }
+
+    const reply = await chatWithDawahAssistant({
+      history: Array.isArray(history) ? history : [],
+      message: String(message).trim(),
+      userRole: authUser.role,
+      userName: authUser.username,
+      modelMode: modelMode === 'fast' ? 'fast' : 'standard',
+      contextSummary,
+    });
+
+    res.json({ reply });
+  } catch (err: any) {
+    console.error('[AI Chat Error]', err);
+    res.status(500).json({ error: err.message || 'AI সহায়ক উত্তর দিতে ব্যর্থ হয়েছে।' });
+  }
+});
+
 

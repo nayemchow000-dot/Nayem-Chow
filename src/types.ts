@@ -52,7 +52,71 @@ export interface FollowUp {
   response?: string | null;
   nextAction?: string | null;
   nextActionDate?: string | null;
+  assignedTo?: string | null;
+  reminderNote?: string | null;
+  isCompleted?: boolean;
+  completedAt?: string | null;
   createdAt: string;
+}
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  banglaName?: string | null;
+  description?: string | null;
+  image?: string | null;
+  icon?: string | null;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface AiVoiceEntry {
+  id: string;
+  contactId: string;
+  adminUserId?: string | null;
+  adminUsername?: string | null;
+  originalTranscription: string;
+  editedTranscription: string;
+  aiObservations: string[];
+  existingIndicators: Array<{ id: string; name: string; banglaName?: string | null }>;
+  suggestedIndicators: Array<{ categoryId: string; name: string; banglaName?: string | null; reason: string; confidence: number }>;
+  uncertainObservations: Array<{ statement: string; possibleCategoryId?: string | null; possibleCategoryName?: string | null; question: string }>;
+  indicatorUpdates: {
+    suggestedStage?: number | null;
+    stageReason?: string | null;
+    suggestedPriority?: Priority | null;
+    fajrTarget?: boolean | null;
+    jummahTarget?: boolean | null;
+    deeniyatTarget?: boolean | null;
+    tafseerTarget?: boolean | null;
+  };
+  approvedCategoryIds: string[];
+  approvedChanges: Record<string, any>;
+  status: 'pending' | 'approved' | 'cancelled';
+  approvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemberAiInsights {
+  id: string;
+  contactId: string;
+  sourceEntryId?: string | null;
+  gapAnalysis?: {
+    achieved: string[];
+    needsAttention: string[];
+    unknownInfo: string[];
+    nextSteps: string[];
+  } | null;
+  dawahGuidance?: {
+    nextStage: string;
+    topicToDiscuss: string;
+    adviceOrInvitation: string;
+    activityToEncourage: string;
+    followUpQuestions: string[];
+    practicalNextAction: string;
+  } | null;
+  updatedAt: string;
 }
 
 export interface Observation {

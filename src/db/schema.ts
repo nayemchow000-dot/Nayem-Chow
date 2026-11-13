@@ -54,6 +54,10 @@ export const followUps = pgTable('follow_ups', {
   response: text('response'),
   nextAction: text('next_action'),
   nextActionDate: date('next_action_date'),
+  assignedTo: text('assigned_to'),
+  reminderNote: text('reminder_note'),
+  isCompleted: boolean('is_completed').default(false).notNull(),
+  completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -119,5 +123,54 @@ export const memberAccounts = pgTable('member_accounts', {
   privacyArea: boolean('privacy_area').default(true).notNull(),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const aiVoiceEntries = pgTable('ai_voice_entries', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'cascade' }).notNull(),
+  adminUserId: uuid('admin_user_id').references(() => memberAccounts.id, { onDelete: 'set null' }),
+  adminUsername: text('admin_username'),
+  originalTranscription: text('original_transcription').notNull(),
+  editedTranscription: text('edited_transcription').notNull(),
+  aiObservations: jsonb('ai_observations').$type<string[]>().default([]),
+  existingIndicators: jsonb('existing_indicators').$type<Array<{ id: string; name: string; banglaName?: string | null }>>().default([]),
+  suggestedIndicators: jsonb('suggested_indicators').$type<Array<{ categoryId: string; name: string; banglaName?: string | null; reason: string; confidence: number }>>().default([]),
+  uncertainObservations: jsonb('uncertain_observations').$type<Array<{ statement: string; possibleCategoryId?: string | null; possibleCategoryName?: string | null; question: string }>>().default([]),
+  indicatorUpdates: jsonb('indicator_updates').$type<{
+    suggestedStage?: number | null;
+    stageReason?: string | null;
+    suggestedPriority?: string | null;
+    fajrTarget?: boolean | null;
+    jummahTarget?: boolean | null;
+    deeniyatTarget?: boolean | null;
+    tafseerTarget?: boolean | null;
+  }>().default({}),
+  approvedCategoryIds: jsonb('approved_category_ids').$type<string[]>().default([]),
+  approvedChanges: jsonb('approved_changes').$type<Record<string, any>>().default({}),
+  status: text('status').default('pending').notNull(), // 'pending' | 'approved' | 'cancelled'
+  approvedAt: timestamp('approved_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const memberAiInsights = pgTable('member_ai_insights', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'cascade' }).notNull().unique(),
+  sourceEntryId: uuid('source_entry_id').references(() => aiVoiceEntries.id, { onDelete: 'set null' }),
+  gapAnalysis: jsonb('gap_analysis').$type<{
+    achieved: string[];
+    needsAttention: string[];
+    unknownInfo: string[];
+    nextSteps: string[];
+  }>(),
+  dawahGuidance: jsonb('dawah_guidance').$type<{
+    nextStage: string;
+    topicToDiscuss: string;
+    adviceOrInvitation: string;
+    activityToEncourage: string;
+    followUpQuestions: string[];
+    practicalNextAction: string;
+  }>(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

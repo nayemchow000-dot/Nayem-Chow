@@ -11,6 +11,9 @@ import Login from './pages/Login';
 import MemberDashboard from './pages/MemberDashboard';
 import PublicProfile from './pages/PublicProfile';
 import AdminAccounts from './pages/AdminAccounts';
+import AIDashboard from './pages/AIDashboard';
+import GlobalSearchBar from './components/GlobalSearchBar';
+import DawahChatbot from './components/DawahChatbot';
 import { 
   LayoutDashboard, Users, Settings, Activity, CalendarHeart, 
   Tags, Menu, X, Shield, ShieldCheck, LogOut, Globe, User, 
@@ -29,6 +32,7 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
   // Navigation Links based on role
   const adminLinks = [
     { href: '/', label: 'My Dawah Priority', icon: LayoutDashboard },
+    { href: '/ai-dashboard', label: 'AI Dawah Center', icon: Sparkles },
     { href: '/my-dashboard', label: 'আমার ড্যাশবোর্ড', icon: User },
     { href: '/contacts', label: 'Dawah Members', icon: Users },
     { href: '/categories', label: 'Brother Categories', icon: Tags },
@@ -195,48 +199,69 @@ function ProtectedLayout() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0B] flex flex-col text-[#E5E5E7] font-sans">
-      <header className="lg:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#0F0F12] sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <button 
-            type="button"
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 -ml-2 text-white/80 hover:text-white rounded-md hover:bg-white/5 transition-colors"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
-          <span className="font-serif italic text-emerald-500 font-medium text-sm">
-            {user.contact?.name || 'দাওয়াহ মুভমেন্ট'}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-            {user.role === 'admin' ? 'Admin' : 'Member'}
-          </span>
-        </div>
-      </header>
-
       <div className="flex flex-1 relative">
         <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
-        
-        <main className="flex-1 lg:ml-64 p-4 sm:p-6 md:p-8 flex flex-col min-w-0 overflow-x-hidden">
-          <div className="flex-1 w-full max-w-6xl mx-auto">
-            <Routes>
-              {/* Member Landing defaults to MemberDashboard; Admin gets Circle Priority Dashboard */}
-              <Route path="/" element={isAdmin ? <Dashboard /> : <MemberDashboard />} />
-              <Route path="/my-dashboard" element={<MemberDashboard />} />
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/contacts/:id" element={<ContactProfile />} />
-              <Route path="/categories" element={<Categories />} />
-              <Route path="/activities" element={<Activities />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/admin/accounts" element={isAdmin ? <AdminAccounts /> : <Navigate to="/my-dashboard" replace />} />
-              <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/my-dashboard" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </main>
+
+        <div className="flex-1 lg:ml-64 flex flex-col min-w-0">
+          {/* Persistent Top Header with Global Search Bar (Desktop & Mobile) */}
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 sm:px-6 md:px-8 py-3 border-b border-white/5 bg-[#0F0F12]/95 backdrop-blur-md">
+            <div className="flex items-center gap-3 shrink-0 lg:hidden">
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="p-2 -ml-2 text-white/80 hover:text-white rounded-md hover:bg-white/5 transition-colors"
+                aria-label="Open menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <span className="font-serif italic text-emerald-500 font-medium text-sm whitespace-nowrap">
+                {user.contact?.name || 'দাওয়াহ মুভমেন্ট'}
+              </span>
+            </div>
+
+            <div className="flex-1 flex items-center justify-start lg:justify-between gap-4 min-w-0">
+              <GlobalSearchBar />
+
+              <div className="hidden md:flex items-center gap-4 shrink-0 text-xs text-white/55">
+                {isAdmin && (
+                  <Link
+                    to="/ai-dashboard"
+                    className="whitespace-nowrap shrink-0 text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>AI Center</span>
+                  </Link>
+                )}
+                <span className="whitespace-nowrap shrink-0 text-white/60">
+                  {user.contact?.name || user.username} · {user.role === 'admin' ? 'Admin' : 'Member'}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 p-4 sm:p-6 md:p-8 flex flex-col min-w-0 overflow-x-hidden">
+            <div className="flex-1 w-full max-w-6xl mx-auto">
+              <Routes>
+                {/* Member Landing defaults to MemberDashboard; Admin gets Circle Priority Dashboard */}
+                <Route path="/" element={isAdmin ? <Dashboard /> : <MemberDashboard />} />
+                <Route path="/ai-dashboard" element={isAdmin ? <AIDashboard /> : <Navigate to="/my-dashboard" replace />} />
+                <Route path="/my-dashboard" element={<MemberDashboard />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/contacts/:id" element={<ContactProfile />} />
+                <Route path="/categories" element={<Categories />} />
+                <Route path="/activities" element={<Activities />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/admin/accounts" element={isAdmin ? <AdminAccounts /> : <Navigate to="/my-dashboard" replace />} />
+                <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/my-dashboard" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </main>
+        </div>
       </div>
+
+      {/* Multi-turn Gemini Dawah Assistant */}
+      <DawahChatbot />
     </div>
   );
 }

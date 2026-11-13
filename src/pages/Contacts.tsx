@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui';
 import { Contact, STAGES } from '../types';
-import { Search, UserPlus, Filter, Trash2 } from 'lucide-react';
+import { Search, UserPlus, Filter, Trash2, Mic } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import VoiceDawahModal from '../components/VoiceDawahModal';
 
 export default function Contacts() {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const [voiceMember, setVoiceMember] = useState<Contact | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -252,6 +256,18 @@ export default function Contacts() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-[11px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 rounded-lg gap-1"
+                              onClick={() => setVoiceMember(contact)}
+                              title="AI ভয়েস নোট"
+                            >
+                              <Mic className="w-3 h-3" />
+                              Voice
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -337,7 +353,7 @@ export default function Contacts() {
                   </div>
 
                   {/* Mobile Action Buttons */}
-                  <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  <div className={`grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 pt-1`}>
                     <button
                       type="button"
                       className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
@@ -366,6 +382,17 @@ export default function Contacts() {
                     >
                       Edit
                     </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        className="py-1.5 px-2 text-[11px] font-medium bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 rounded-lg text-emerald-300 text-center inline-flex items-center justify-center gap-1"
+                        onClick={() => setVoiceMember(contact)}
+                        title="ভয়েস নোট রেকর্ড করুন"
+                      >
+                        <Mic className="w-3 h-3" />
+                        Voice
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -389,6 +416,26 @@ export default function Contacts() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {isAdmin && voiceMember && (
+        <VoiceDawahModal
+          open={!!voiceMember}
+          onOpenChange={(open) => {
+            if (!open) setVoiceMember(null);
+          }}
+          member={{
+            id: voiceMember.id,
+            name: voiceMember.name,
+            currentStage: voiceMember.currentStage,
+            priorityLevel: voiceMember.priorityLevel,
+            categoryTags: voiceMember.categoryTags,
+          }}
+          onApproved={() => {
+            setVoiceMember(null);
+            fetchContacts();
+          }}
+        />
+      )}
     </div>
   );
 }
