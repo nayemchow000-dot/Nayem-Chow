@@ -14,7 +14,10 @@ export const createPool = () => {
       // Robust connection handling for Supabase & other Postgres providers
       let poolConfig: any = {
         max: 10,
+        idleTimeoutMillis: 20000,
         connectionTimeoutMillis: 15000,
+        query_timeout: 30000,
+        keepAlive: true,
         ssl: { rejectUnauthorized: false },
       };
 
@@ -55,7 +58,10 @@ export const createPool = () => {
         password: process.env.SQL_PASSWORD,
         database: process.env.SQL_DB_NAME,
         max: 10,
+        idleTimeoutMillis: 20000,
         connectionTimeoutMillis: 15000,
+        query_timeout: 30000,
+        keepAlive: true,
       });
     }
 

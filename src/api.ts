@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Router } from 'express';
 import { db, ensureAiTables } from './db/db';
 import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings, memberAccounts, aiVoiceEntries, memberAiInsights } from './db/schema';
@@ -399,28 +400,54 @@ apiRouter.post('/auth/login', async (req, res) => {
     const cleanPhone = cleanInput.replace(/[^0-9]/g, '');
 
     const accounts = await db.select().from(memberAccounts);
-    let matched = accounts.find(a => a.username.toLowerCase() === cleanInput.toLowerCase());
+    const candidates: typeof accounts = [];
+    const seenIds = new Set<string>();
 
-    if (!matched && cleanPhone.length >= 6) {
-      matched = accounts.find(a => a.username.replace(/[^0-9]/g, '') === cleanPhone);
-      if (!matched) {
-        const allContacts = await db.select().from(contacts);
-        const contactMatch = allContacts.find(c => (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
-        if (contactMatch) {
-          matched = accounts.find(a => a.contactId === contactMatch.id);
-        }
+    const addCandidate = (acc: (typeof accounts)[number] | undefined) => {
+      if (acc && !seenIds.has(acc.id)) {
+        seenIds.add(acc.id);
+        candidates.push(acc);
       }
+    };
+
+    // 1. Exact username match (case-insensitive)
+    accounts
+      .filter((a) => a.username.toLowerCase() === cleanInput.toLowerCase())
+      .forEach(addCandidate);
+
+    // 2. Numeric phone match on username or linked contacts
+    if (cleanPhone.length >= 6) {
+      accounts
+        .filter((a) => a.username.replace(/[^0-9]/g, '') === cleanPhone)
+        .forEach(addCandidate);
+
+      const allContacts = await db.select().from(contacts);
+      const matchingContactIds = new Set(
+        allContacts
+          .filter((c) => (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone)
+          .map((c) => c.id)
+      );
+      accounts
+        .filter((a) => a.contactId && matchingContactIds.has(a.contactId))
+        .forEach(addCandidate);
     }
 
-    if (!matched || !matched.isActive) {
+    if (candidates.length === 0) {
       return res.status(401).json({ error: 'ইউজারনেম বা পাসওয়ার্ড সঠিক নয় অথবা একাউন্টটি নিষ্ক্রিয়।' });
     }
 
-    const isMatch = verifyPassword(password, matched.passwordHash);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'পাসওয়ার্ড সঠিক নয়।' });
+    // Prefer an active candidate whose password matches
+    const verifiedActive = candidates.find((a) => a.isActive && verifyPassword(password, a.passwordHash));
+    if (!verifiedActive) {
+      const hasAnyActive = candidates.some((a) => a.isActive);
+      return res.status(401).json({
+        error: hasAnyActive
+          ? 'পাসওয়ার্ড সঠিক নয়।'
+          : 'ইউজারনেম বা পাসওয়ার্ড সঠিক নয় অথবা একাউন্টটি নিষ্ক্রিয়।'
+      });
     }
 
+    const matched = verifiedActive;
     let contactData: any = null;
     if (matched.contactId) {
       const c = await db.select().from(contacts).where(eq(contacts.id, matched.contactId));
@@ -449,10 +476,10 @@ apiRouter.post('/auth/login', async (req, res) => {
   }
 });
 
-// Member Self-Registration
+// Member Self-Registration (completely decoupled from Admin's private contacts list)
 apiRouter.post('/auth/register', async (req, res) => {
   try {
-    const { name, phone, area, password } = req.body;
+    const { name, phone, area, password, username } = req.body;
     if (!name || !phone || !password) {
       return res.status(400).json({ error: 'নাম, মোবাইল নম্বর এবং পাসওয়ার্ড আবশ্যক।' });
     }
@@ -461,74 +488,101 @@ apiRouter.post('/auth/register', async (req, res) => {
     }
 
     const cleanPhone = String(phone).replace(/[^0-9]/g, '');
-    const cleanUsername = cleanPhone.length >= 6 ? cleanPhone : String(phone).trim();
+    const customUsername = String(username || '').trim().replace(/\s+/g, '_');
+    const cleanUsername = customUsername || (cleanPhone.length >= 6 ? cleanPhone : String(phone).trim());
 
-    // Check if account with that username already exists
-    const existing = await db.select().from(memberAccounts).where(eq(memberAccounts.username, cleanUsername));
-    if (existing.length > 0) {
-      return res.status(400).json({ error: 'এই মোবাইল নম্বর বা ইউজারনেম দিয়ে ইতোমধ্যে একাউন্ট খোলা আছে। অনুগ্রহ করে লগইন করুন।' });
+    if (cleanUsername.length < 3) {
+      return res.status(400).json({ error: 'ইউজার আইডি বা মোবাইল নম্বর কমপক্ষে ৩ অক্ষরের হতে হবে।' });
     }
 
-    // Check if an existing contact with this phone already exists in contacts
-    const allContacts = await db.select().from(contacts);
-    let contactId: string;
-    let contactData: any;
+    const allAccounts = await db.select().from(memberAccounts);
+    const existingAcc = allAccounts.find((a) => a.username.toLowerCase() === cleanUsername.toLowerCase());
 
-    const matchedContact = allContacts.find(c => (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
-    if (matchedContact) {
-      contactId = matchedContact.id;
-      contactData = matchedContact;
-    } else {
-      const today = new Date().toISOString().split('T')[0];
-      const newContact = await db.insert(contacts).values({
-        name: String(name).trim(),
-        phone: String(phone).trim(),
-        area: area ? String(area).trim() : 'কোটবাড়ি',
-        currentStage: 1,
-        growthScore: 0,
-        weeklyChange: 0,
-        monthlyChange: 0,
-        priorityLevel: 'stable',
-        fajrTarget: false,
-        jummahTarget: false,
-        deeniyatTarget: false,
-        tafseerTarget: false,
-        categoryTags: [],
-        firstContactDate: today,
-      }).returning();
-      contactId = newContact[0].id;
-      contactData = newContact[0];
+    const isLegacyAutoSyncedPlaceholder =
+      !!existingAcc &&
+      existingAcc.role === 'member' &&
+      (existingAcc.customBio || '').startsWith('Kotbari Dawah Movement member:') &&
+      verifyPassword('123456', existingAcc.passwordHash);
+
+    if (existingAcc && !isLegacyAutoSyncedPlaceholder) {
+      return res.status(400).json({
+        error: customUsername
+          ? 'এই ইউজার আইডিটি ইতোমধ্যে ব্যবহৃত হয়েছে। অনুগ্রহ করে ভিন্ন একটি ইউজার আইডি দিন অথবা লগইন করুন।'
+          : 'এই মোবাইল নম্বর দিয়ে ইতোমধ্যে একটি একাউন্ট খোলা আছে। লগইন করুন অথবা "পছন্দের ইউজার আইডি" ঘরে নতুন আইডি দিয়ে একাউন্ট খুলুন।'
+      });
     }
 
-    const passwordHash = hashPassword(password);
-    const slug = `brother-${contactId.substring(0, 8)}`;
-
-    const newAccount = await db.insert(memberAccounts).values({
-      contactId,
-      username: cleanUsername,
-      passwordHash,
-      role: 'member',
-      isActive: true,
-      isPublic: false,
-      shareSlug: slug,
-      customBio: `কোটবাড়ি দাওয়াহ মুভমেন্টের সদস্য: ${String(name).trim()}`,
-      privacyProfileInfo: true,
-      privacyGrowthStage: true,
-      privacyGrowthJourney: true,
-      privacySalahTracking: true,
-      privacyActivities: true,
-      privacyPhone: false,
-      privacyArea: true,
+    // Always create a brand-new, private member contact record — NEVER expose or link to Admin's pre-saved contacts
+    const today = new Date().toISOString().split('T')[0];
+    const newContact = await db.insert(contacts).values({
+      name: String(name).trim(),
+      phone: String(phone).trim(),
+      area: area ? String(area).trim() : 'কোটবাড়ি',
+      currentStage: 1,
+      growthScore: 0,
+      weeklyChange: 0,
+      monthlyChange: 0,
+      priorityLevel: 'stable',
+      fajrTarget: false,
+      jummahTarget: false,
+      deeniyatTarget: false,
+      tafseerTarget: false,
+      categoryTags: [],
+      firstContactDate: today,
     }).returning();
 
+    const contactId = newContact[0].id;
+    const contactData = newContact[0];
+    const passwordHash = hashPassword(password);
+    const slug = `brother-${crypto.randomUUID().slice(0, 8)}`;
+
+    let savedAccount: typeof existingAcc;
+    if (existingAcc && isLegacyAutoSyncedPlaceholder) {
+      const updated = await db
+        .update(memberAccounts)
+        .set({
+          contactId,
+          username: cleanUsername,
+          passwordHash,
+          role: 'member',
+          isActive: true,
+          isPublic: false,
+          shareSlug: slug,
+          customBio: `কোটবাড়ি দাওয়াহ মুভমেন্টের সদস্য: ${String(name).trim()}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(memberAccounts.id, existingAcc.id))
+        .returning();
+      savedAccount = updated[0];
+    } else {
+      const inserted = await db.insert(memberAccounts).values({
+        contactId,
+        username: cleanUsername,
+        passwordHash,
+        role: 'member',
+        isActive: true,
+        isPublic: false,
+        shareSlug: slug,
+        customBio: `কোটবাড়ি দাওয়াহ মুভমেন্টের সদস্য: ${String(name).trim()}`,
+        privacyProfileInfo: true,
+        privacyGrowthStage: true,
+        privacyGrowthJourney: true,
+        privacySalahTracking: true,
+        privacyActivities: true,
+        privacyPhone: false,
+        privacyArea: true,
+      }).returning();
+      savedAccount = inserted[0];
+    }
+
     const token = generateToken({
-      userId: newAccount[0].id,
+      userId: savedAccount!.id,
       role: 'member',
       contactId,
       username: cleanUsername,
     });
 
-    const { passwordHash: _, ...safeUser } = newAccount[0];
+    const { passwordHash: _, ...safeUser } = savedAccount!;
     res.setHeader('Set-Cookie', `kotbari_token=${token}; Path=/; SameSite=Lax; Max-Age=2592000`);
     res.json({
       token,

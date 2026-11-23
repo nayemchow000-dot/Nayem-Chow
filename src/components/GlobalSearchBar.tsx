@@ -80,7 +80,7 @@ export default function GlobalSearchBar() {
   return (
     <div ref={containerRef} className="relative w-full max-w-md">
       <div className="relative flex items-center">
-        <Search className="w-4 h-4 text-white/40 absolute left-3 pointer-events-none" />
+        <Search className="w-4 h-4 text-[#8EA39A] absolute left-3.5 pointer-events-none" />
         <input
           ref={inputRef}
           type="text"
@@ -92,10 +92,10 @@ export default function GlobalSearchBar() {
           }}
           placeholder="নাম বা ক্যাটাগরি দিয়ে খুঁজুন... (Search name or category)"
           aria-label="Search contacts by name or category"
-          className="w-full h-10 pl-9 pr-16 rounded-lg bg-[#0A0A0B] border border-white/10 text-xs sm:text-sm text-[#E5E5E7] placeholder:text-white/35 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/40 transition-colors"
+          className="w-full h-10 pl-10 pr-16 rounded-xl forest-input text-xs sm:text-sm text-[#EDF4F0] placeholder:text-[#5D726A] transition-all"
         />
         <div className="absolute right-2.5 flex items-center gap-1.5">
-          {loading && <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />}
+          {loading && <Loader2 className="w-3.5 h-3.5 text-[#34D399] animate-spin" />}
           {query && (
             <button
               type="button"
@@ -103,40 +103,40 @@ export default function GlobalSearchBar() {
                 setQuery('');
                 inputRef.current?.focus();
               }}
-              className="p-1 text-white/40 hover:text-white rounded transition-colors"
+              className="p-1 text-[#8EA39A] hover:text-[#EDF4F0] rounded transition-colors"
               aria-label="Clear search"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           )}
-          <kbd className="hidden sm:inline-block text-[10px] font-mono text-white/30 px-1.5 py-0.5 border border-white/10 rounded">
+          <kbd className="hidden sm:inline-block text-[10px] font-mono text-[#8EA39A] px-1.5 py-0.5 border border-white/15 bg-white/[0.04] rounded-md">
             ⌘K
           </kbd>
         </div>
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 mt-2 bg-[#16161A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 max-h-96 overflow-y-auto">
+        <div className="absolute left-0 right-0 mt-2 glass-modal rounded-2xl overflow-hidden z-50 max-h-96 overflow-y-auto">
           {loading && results.length === 0 ? (
-            <div className="p-4 text-xs text-white/50 text-center">সদস্য খোঁজা হচ্ছে...</div>
+            <div className="p-4 text-xs text-[#8EA39A] text-center">সদস্য খোঁজা হচ্ছে...</div>
           ) : results.length === 0 ? (
-            <div className="p-4 text-xs text-white/50 text-center">
+            <div className="p-4 text-xs text-[#8EA39A] text-center">
               কোনো সদস্য বা ক্যাটাগরি পাওয়া যায়নি
             </div>
           ) : (
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-white/10">
               {results.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => handleSelect(item.id)}
-                  className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors flex items-center justify-between gap-3 group"
+                  className="w-full text-left px-4 py-3 hover:bg-white/[0.06] transition-colors flex items-center justify-between gap-3 group"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-[#E5E5E7] group-hover:text-emerald-400 transition-colors truncate">
+                    <div className="text-sm font-medium text-[#EDF4F0] group-hover:text-[#B6F5D8] transition-colors truncate">
                       {item.name}
                     </div>
-                    <div className="text-xs text-white/45 flex flex-wrap items-center gap-1.5 mt-0.5">
+                    <div className="text-xs text-[#8EA39A] flex flex-wrap items-center gap-1.5 mt-0.5">
                       <span className="tabular-nums">স্টেজ {item.currentStage}</span>
                       <span aria-hidden="true">·</span>
                       <span className="truncate">{item.stageName}</span>
@@ -148,12 +148,12 @@ export default function GlobalSearchBar() {
                       )}
                     </div>
                     {item.categories.length > 0 && (
-                      <div className="text-[11px] text-emerald-400/80 mt-1 truncate">
+                      <div className="text-[11px] text-[#34D399] mt-1 truncate">
                         {item.categories.join(' · ')}
                       </div>
                     )}
                   </div>
-                  <ArrowRight className="w-4 h-4 text-white/30 group-hover:text-emerald-400 shrink-0 transition-colors" />
+                  <ArrowRight className="w-4 h-4 text-[#5D726A] group-hover:text-[#34D399] shrink-0 transition-colors" />
                 </button>
               ))}
             </div>

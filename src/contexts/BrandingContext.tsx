@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 
 interface BrandingData {
   primaryLogo?: string;
@@ -29,7 +30,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const fetchBranding = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/branding');
+      const res = await apiFetch('/api/branding');
       if (res.ok) {
         const data = await res.json();
         setBranding(data);

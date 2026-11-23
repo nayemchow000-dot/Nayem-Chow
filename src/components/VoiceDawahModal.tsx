@@ -308,20 +308,20 @@ export default function VoiceDawahModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-[#16161A] border border-white/10">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg text-[#E5E5E7]">
-            <Mic className="w-5 h-5 text-emerald-400" />
+          <DialogTitle className="flex items-center gap-2 text-lg text-[#EDF4F0]">
+            <Mic className="w-5 h-5 text-[#34D399]" />
             <span>AI ভয়েস নোট ও প্রোফাইল আপডেট</span>
           </DialogTitle>
-          <DialogDescription className="text-xs text-white/50">
-            সদস্য: <span className="text-emerald-400 font-medium">{member.name}</span> · ID:{' '}
+          <DialogDescription className="text-xs text-[#8EA39A]">
+            সদস্য: <span className="text-[#B6F5D8] font-medium">{member.name}</span> · ID:{' '}
             <span className="font-mono">{member.id.slice(0, 8)}</span>
           </DialogDescription>
         </DialogHeader>
 
         {error && (
-          <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-2">
+          <div className="p-3 rounded-xl bg-rose-500/12 border border-rose-400/30 text-rose-300 text-xs flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -330,11 +330,11 @@ export default function VoiceDawahModal({
         {/* STEP 1 & 2: RECORD & EDIT TRANSCRIPTION */}
         {(step === 'record' || step === 'transcribed') && (
           <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-[#0A0A0B] border border-white/10 space-y-3">
+            <div className="p-4 rounded-2xl glass-2 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-medium text-[#E5E5E7]">১. বাংলায় ভয়েস নোট রেকর্ড করুন</h4>
-                  <p className="text-xs text-white/45 mt-0.5">
+                  <h4 className="text-sm font-medium text-[#EDF4F0]">১. বাংলায় ভয়েস নোট রেকর্ড করুন</h4>
+                  <p className="text-xs text-[#8EA39A] mt-0.5">
                     সদস্যের সালাহ, মসজিদ, ইলমি মুহাজারা, পাঠচক্র বা যোগাযোগ সম্পর্কে স্বাভাবিকভাবে বলুন।
                   </p>
                 </div>
@@ -343,7 +343,7 @@ export default function VoiceDawahModal({
                   <Button
                     type="button"
                     onClick={startRecording}
-                    className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white min-h-[40px]"
+                    className="gap-2 min-h-[40px]"
                   >
                     <Mic className="w-4 h-4" />
                     রেকর্ডিং শুরু
@@ -362,15 +362,15 @@ export default function VoiceDawahModal({
               </div>
 
               {isRecording && (
-                <div className="text-xs text-rose-400 font-mono tabular-nums">
+                <div className="text-xs text-rose-300 font-mono tabular-nums">
                   রেকর্ডিং চলছে: {formatTimer(recordingSeconds)}
                 </div>
               )}
 
               {audioUrl && !isRecording && (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2 border-t border-white/5">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2 border-t border-white/10">
                   <div className="flex items-center gap-2 flex-1">
-                    <Volume2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <Volume2 className="w-4 h-4 text-[#34D399] shrink-0" />
                     <audio controls src={audioUrl} className="h-9 w-full" />
                   </div>
                   <Button
@@ -387,7 +387,7 @@ export default function VoiceDawahModal({
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                        <Sparkles className="w-4 h-4 text-[#34D399]" />
                         টেক্সটে রূপান্তর করুন
                       </>
                     )}
@@ -399,11 +399,11 @@ export default function VoiceDawahModal({
             {/* Editable Bengali Transcription Box (visible before AI analysis) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-white/70">
+                <label className="text-xs font-medium text-[#8EA39A]">
                   ২. বাংলা ট্রান্সক্রিপশন (বিশ্লেষণের আগে সম্পাদনা করতে পারবেন)
                 </label>
                 {step === 'transcribed' && (
-                  <span className="text-[11px] text-emerald-400">ট্রান্সক্রিপশন সম্পন্ন</span>
+                  <span className="text-[11px] text-[#34D399]">ট্রান্সক্রিপশন সম্পন্ন</span>
                 )}
               </div>
               <textarea
@@ -414,7 +414,7 @@ export default function VoiceDawahModal({
                   if (!originalTranscription) setOriginalTranscription(e.target.value);
                 }}
                 placeholder="উদাহরণ: এই ভাই এখন নিয়মিত মসজিদে আসে, ইলমি মুহাজারায় মাঝে মাঝে আসে, বয়ানে উপস্থিত হয় এবং ফোন দিলে কথা বলা যায়।"
-                className="w-full rounded-lg bg-[#0A0A0B] border border-white/10 p-3 text-sm text-[#E5E5E7] placeholder:text-white/30 focus:outline-none focus:border-emerald-500"
+                className="w-full rounded-xl forest-input p-3 text-sm text-[#EDF4F0] placeholder:text-[#5D726A]"
               />
             </div>
 
@@ -426,7 +426,7 @@ export default function VoiceDawahModal({
                 type="button"
                 onClick={handleAnalyzeText}
                 disabled={analyzing || !editedTranscription.trim()}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white min-h-[40px]"
+                className="gap-2 min-h-[40px]"
               >
                 {analyzing ? (
                   <>
@@ -448,13 +448,13 @@ export default function VoiceDawahModal({
         {step === 'review' && pendingEntry && (
           <div className="space-y-5">
             {/* Member & Transcription Summary */}
-            <div className="p-4 rounded-xl bg-[#0A0A0B] border border-white/10 space-y-2">
+            <div className="p-4 rounded-2xl glass-2 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-white/60">মূল ভয়েস ট্রান্সক্রিপশন</span>
+                <span className="text-xs font-semibold text-[#8EA39A]">মূল ভয়েস ট্রান্সক্রিপশন</span>
                 <button
                   type="button"
                   onClick={() => setIsEditingInReview(!isEditingInReview)}
-                  className="text-xs text-emerald-400 hover:underline flex items-center gap-1"
+                  className="text-xs text-[#34D399] hover:underline flex items-center gap-1"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   {isEditingInReview ? 'সম্পাদনা শেষ' : 'সম্পাদনা (Edit)'}
@@ -465,16 +465,16 @@ export default function VoiceDawahModal({
                   rows={3}
                   value={editedTranscription}
                   onChange={(e) => setEditedTranscription(e.target.value)}
-                  className="w-full rounded-md bg-[#16161A] border border-white/15 p-2.5 text-sm text-[#E5E5E7]"
+                  className="w-full rounded-xl forest-input p-2.5 text-sm text-[#EDF4F0]"
                 />
               ) : (
-                <p className="text-sm text-[#E5E5E7] leading-relaxed">“{editedTranscription}”</p>
+                <p className="text-sm text-[#EDF4F0] leading-relaxed">“{editedTranscription}”</p>
               )}
             </div>
 
             {/* AI-Understood Observations */}
             <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-white/60">
+              <h4 className="eyebrow text-[#8EA39A]">
                 AI-অনুধাবিত পর্যবেক্ষণ (Observations)
               </h4>
               <div className="space-y-1.5">
@@ -488,10 +488,10 @@ export default function VoiceDawahModal({
                           next[idx] = e.target.value;
                           setEditableObservations(next);
                         }}
-                        className="flex-1 rounded bg-[#0A0A0B] border border-white/10 px-3 py-1.5 text-xs text-[#E5E5E7]"
+                        className="flex-1 rounded-xl forest-input px-3 py-1.5 text-xs text-[#EDF4F0]"
                       />
                     ) : (
-                      <div className="text-xs text-white/80 bg-[#0A0A0B] border border-white/5 rounded-lg px-3 py-2 w-full">
+                      <div className="text-xs text-[#EDF4F0]/90 glass-2 rounded-xl px-3 py-2 w-full">
                         • {obs}
                       </div>
                     )}
@@ -502,10 +502,10 @@ export default function VoiceDawahModal({
 
             {/* Existing Indicators */}
             <div className="space-y-1.5">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-white/60">
+              <h4 className="eyebrow text-[#8EA39A]">
                 বিদ্যমান ইনডিকেটর (Existing Indicators)
               </h4>
-              <div className="text-xs text-white/60">
+              <div className="text-xs text-[#8EA39A]">
                 {(pendingEntry.existingIndicators || []).length > 0
                   ? pendingEntry.existingIndicators.map((c) => c.banglaName || c.name).join(' · ')
                   : 'এখনো কোনো ক্যাটাগরি যুক্ত নেই'}
@@ -514,11 +514,11 @@ export default function VoiceDawahModal({
 
             {/* Newly Suggested Indicators */}
             <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+              <h4 className="eyebrow text-[#34D399]">
                 নতুন প্রস্তাবিত ইনডিকেটর (ডাটাবেস ক্যাটাগরি আইডিসহ)
               </h4>
               {(pendingEntry.suggestedIndicators || []).length === 0 ? (
-                <p className="text-xs text-white/45">কোনো নিশ্চিত নতুন ক্যাটাগরি প্রস্তাবিত হয়নি।</p>
+                <p className="text-xs text-[#8EA39A]">কোনো নিশ্চিত নতুন ক্যাটাগরি প্রস্তাবিত হয়নি।</p>
               ) : (
                 <div className="space-y-2">
                   {pendingEntry.suggestedIndicators.map((sug) => {
@@ -526,28 +526,28 @@ export default function VoiceDawahModal({
                     return (
                       <label
                         key={sug.categoryId}
-                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                           checked
-                            ? 'bg-emerald-500/10 border-emerald-500/40'
-                            : 'bg-[#0A0A0B] border-white/10 hover:border-white/20'
+                            ? 'bg-[#34D399]/12 border-[#34D399]/40'
+                            : 'glass-2 hover:border-white/25'
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleCategory(sug.categoryId)}
-                          className="mt-1 accent-emerald-500"
+                          className="mt-1 accent-[#34D399]"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-sm font-medium text-[#E5E5E7]">
+                            <span className="text-sm font-medium text-[#EDF4F0]">
                               {sug.banglaName || sug.name}
                             </span>
-                            <span className="text-[11px] font-mono tabular-nums text-white/40">
+                            <span className="text-[11px] font-mono tabular-nums text-[#8EA39A]">
                               ID: {sug.categoryId.slice(0, 8)} · {Math.round((sug.confidence || 0.85) * 100)}%
                             </span>
                           </div>
-                          <p className="text-xs text-white/55 mt-0.5">{sug.reason}</p>
+                          <p className="text-xs text-[#8EA39A] mt-0.5">{sug.reason}</p>
                         </div>
                       </label>
                     );
@@ -559,7 +559,7 @@ export default function VoiceDawahModal({
             {/* Uncertain Observations (Requires Confirmation, NOT auto-selected) */}
             {(pendingEntry.uncertainObservations || []).length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <h4 className="eyebrow text-[#F4A85E] flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   নিশ্চিতকরণ প্রয়োজন (Uncertain Observations — স্বয়ংক্রিয়ভাবে নির্বাচিত নয়)
                 </h4>
@@ -569,17 +569,17 @@ export default function VoiceDawahModal({
                     return (
                       <div
                         key={idx}
-                        className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/25 space-y-1.5"
+                        className="p-3 rounded-xl glass-hot space-y-1.5"
                       >
-                        <div className="text-xs text-amber-200 font-medium">“{u.statement}”</div>
-                        <div className="text-xs text-white/60">{u.question}</div>
+                        <div className="text-xs text-[#E8CD92] font-medium">“{u.statement}”</div>
+                        <div className="text-xs text-[#8EA39A]">{u.question}</div>
                         {u.possibleCategoryId && (
-                          <label className="inline-flex items-center gap-2 text-xs text-amber-300 cursor-pointer pt-1">
+                          <label className="inline-flex items-center gap-2 text-xs text-[#F4A85E] cursor-pointer pt-1">
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleCategory(u.possibleCategoryId!)}
-                              className="accent-amber-500"
+                              className="accent-[#F4A85E]"
                             />
                             <span>সম্ভাব্য ক্যাটাগরি যুক্ত করুন: {u.possibleCategoryName}</span>
                           </label>
@@ -594,18 +594,18 @@ export default function VoiceDawahModal({
             {/* Manual/Additional Category Picker when Editing */}
             {isEditingInReview && categories.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-white/10">
-                <h4 className="text-xs font-semibold text-white/60">সব ক্যাটাগরি থেকে নির্বাচন/সংশোধন</h4>
+                <h4 className="text-xs font-semibold text-[#8EA39A]">সব ক্যাটাগরি থেকে নির্বাচন/সংশোধন</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1">
                   {categories.map((cat) => (
                     <label
                       key={cat.id}
-                      className="flex items-center gap-2 text-xs text-white/75 p-2 rounded bg-[#0A0A0B] border border-white/5 cursor-pointer"
+                      className="flex items-center gap-2 text-xs text-[#EDF4F0]/85 p-2 rounded-xl glass-2 cursor-pointer"
                     >
                       <input
                         type="checkbox"
                         checked={selectedCategoryIds.has(cat.id)}
                         onChange={() => toggleCategory(cat.id)}
-                        className="accent-emerald-500"
+                        className="accent-[#34D399]"
                       />
                       <span className="truncate">{cat.banglaName || cat.name}</span>
                     </label>
@@ -615,34 +615,34 @@ export default function VoiceDawahModal({
             )}
 
             {/* Stage & Priority Suggested Updates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg bg-[#0A0A0B] border border-white/10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl glass-2">
               <div className="space-y-1">
-                <label className="text-[11px] text-white/50">গ্রোথ স্টেজ আপডেট (ঐচ্ছিক)</label>
+                <label className="text-[11px] text-[#8EA39A]">গ্রোথ স্টেজ আপডেট (ঐচ্ছিক)</label>
                 <select
                   value={applyStage}
                   onChange={(e) => setApplyStage(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full h-9 rounded bg-[#16161A] border border-white/10 px-2.5 text-xs text-[#E5E5E7]"
+                  className="w-full h-9 rounded-xl forest-input px-2.5 text-xs text-[#EDF4F0]"
                 >
-                  <option value="">বর্তমান স্টেজ অপরিবর্তিত ({member.currentStage || 1})</option>
+                  <option value="" className="bg-[#0A1210]">বর্তমান স্টেজ অপরিবর্তিত ({member.currentStage || 1})</option>
                   {STAGES.map((s, idx) => (
-                    <option key={idx} value={idx + 1}>
+                    <option key={idx} value={idx + 1} className="bg-[#0A1210]">
                       {idx + 1}. {s}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] text-white/50">প্রায়োরিটি লেভেল (ঐচ্ছিক)</label>
+                <label className="text-[11px] text-[#8EA39A]">প্রায়োরিটি লেভেল (ঐচ্ছিক)</label>
                 <select
                   value={applyPriority}
                   onChange={(e) => setApplyPriority((e.target.value as Priority) || '')}
-                  className="w-full h-9 rounded bg-[#16161A] border border-white/10 px-2.5 text-xs text-[#E5E5E7]"
+                  className="w-full h-9 rounded-xl forest-input px-2.5 text-xs text-[#EDF4F0]"
                 >
-                  <option value="">অপরিবর্তিত</option>
-                  <option value="growing">Growing</option>
-                  <option value="stable">Stable</option>
-                  <option value="needs_attention">Needs Attention</option>
-                  <option value="high_priority">High Priority</option>
+                  <option value="" className="bg-[#0A1210]">অপরিবর্তিত</option>
+                  <option value="growing" className="bg-[#0A1210]">Growing</option>
+                  <option value="stable" className="bg-[#0A1210]">Stable</option>
+                  <option value="needs_attention" className="bg-[#0A1210]">Needs Attention</option>
+                  <option value="high_priority" className="bg-[#0A1210]">High Priority</option>
                 </select>
               </div>
             </div>
@@ -651,9 +651,9 @@ export default function VoiceDawahModal({
             <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/10">
               <Button
                 type="button"
-                variant="ghost"
+                variant="destructive"
                 onClick={handleCancelPending}
-                className="gap-1.5 text-rose-400 hover:text-rose-300"
+                className="gap-1.5"
               >
                 <XCircle className="w-4 h-4" />
                 Cancel
@@ -674,7 +674,7 @@ export default function VoiceDawahModal({
                   type="button"
                   onClick={handleApproveAndSave}
                   disabled={savingApproval}
-                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white min-h-[40px]"
+                  className="gap-1.5 min-h-[40px]"
                 >
                   {savingApproval ? (
                     <>
@@ -696,14 +696,14 @@ export default function VoiceDawahModal({
         {/* STEP 4: DONE */}
         {step === 'done' && (
           <div className="py-6 text-center space-y-4">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-full bg-[#34D399]/18 border border-[#34D399]/35 text-[#34D399] flex items-center justify-center mx-auto">
               <Check className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h4 className="text-base font-semibold text-[#E5E5E7]">
+              <h4 className="text-base font-semibold text-[#EDF4F0]">
                 অনুমোদিত তথ্য ও AI গ্যাপ অ্যানালাইসিস সংরক্ষিত হয়েছে
               </h4>
-              <p className="text-xs text-white/55">
+              <p className="text-xs text-[#8EA39A]">
                 {member.name}-এর প্রোফাইল, অডিট লগ এবং পরবর্তী দাওয়াহ গাইডেন্স সফলভাবে আপডেট হয়েছে।
               </p>
             </div>
@@ -725,7 +725,6 @@ export default function VoiceDawahModal({
               <Button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white"
               >
                 সম্পন্ন
               </Button>

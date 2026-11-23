@@ -1,41 +1,157 @@
 @import "tailwindcss";
 
+:root {
+  --bg-night: #050807;
+  --bg-forest: #0A1210;
+  --moss: #1C4A3F;
+  --emerald: #34D399;
+  --emerald-deep: #0E9F6E;
+  --mint: #B6F5D8;
+  --amber: #F4A85E;
+  --copper: #DD7B3C;
+  --gold: #E8CD92;
+  --text-primary: #EDF4F0;
+  --text-muted: #8EA39A;
+  --text-faint: #5D726A;
+}
+
 @theme {
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
+  --font-serif: 'Instrument Serif', 'Noto Serif Bengali', Georgia, serif;
+  --font-display: 'Instrument Serif', 'Noto Serif Bengali', Georgia, serif;
+  --font-sans: 'Inter', 'Anek Bangla', 'Hind Siliguri', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-border: rgba(255, 255, 255, 0.14);
+  --color-input: rgba(255, 255, 255, 0.08);
+  --color-ring: #34D399;
+  --color-background: #050807;
+  --color-foreground: #EDF4F0;
+}
 
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
+@layer base {
+  html, body {
+    background-color: #050807;
+    color: #EDF4F0;
+    font-family: var(--font-sans);
+    min-height: 100%;
+  }
 
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  body {
+    background-image:
+      radial-gradient(60% 50% at 18% 8%, rgba(52, 211, 153, 0.18), transparent 70%),
+      radial-gradient(50% 45% at 88% 12%, rgba(40, 110, 120, 0.18), transparent 65%),
+      radial-gradient(45% 40% at 82% 86%, rgba(221, 123, 60, 0.16), transparent 65%),
+      linear-gradient(180deg, #07100d 0%, #050807 100%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+  }
 
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* Custom Midnight Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(5, 8, 7, 0.4);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(52, 211, 153, 0.35);
+  }
 }
 
 @layer utilities {
+  .glass {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    backdrop-filter: blur(22px) saturate(145%);
+    -webkit-backdrop-filter: blur(22px) saturate(145%);
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.48),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .glass-2 {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+
+  .glass-hot {
+    background: linear-gradient(160deg, rgba(244, 168, 94, 0.14), rgba(221, 123, 60, 0.04));
+    border: 1px solid rgba(244, 168, 94, 0.36);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.45),
+      0 0 38px rgba(244, 168, 94, 0.12),
+      inset 0 1px 0 rgba(255, 224, 180, 0.25);
+  }
+
+  .glass-modal {
+    background: linear-gradient(165deg, rgba(16, 28, 24, 0.94), rgba(7, 13, 11, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(28px) saturate(155%);
+    -webkit-backdrop-filter: blur(28px) saturate(155%);
+    box-shadow:
+      0 32px 80px rgba(0, 0, 0, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #34D399;
+    font-weight: 500;
+  }
+
+  .forest-btn-primary {
+    background: linear-gradient(135deg, #34D399 0%, #B6F5D8 100%);
+    color: #04140D;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(52, 211, 153, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+  .forest-btn-primary:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 10px 28px rgba(52, 211, 153, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .forest-input {
+    background: rgba(5, 11, 9, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #EDF4F0;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .forest-input:focus {
+    border-color: rgba(52, 211, 153, 0.55);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15);
+    outline: none;
+  }
+
+  .forest-noise {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  }
+
   .mask-image-fade {
     mask-image: radial-gradient(circle at center, black 0%, transparent 80%);
     -webkit-mask-image: radial-gradient(circle at center, black 0%, transparent 80%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

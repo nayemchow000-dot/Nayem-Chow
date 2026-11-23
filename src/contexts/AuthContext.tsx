@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { MemberAccount, Contact } from '../types';
+import { apiFetch } from '../lib/api';
 
 interface AuthContextType {
   user: MemberAccount | null;
@@ -7,7 +8,7 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   login: (usernameOrPhone: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, phone: string, area: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, phone: string, area: string, password: string, username?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   updatePrivacy: (settings: Partial<MemberAccount>) => Promise<boolean>;
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await apiFetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${savedToken}`
         }
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         setToken(savedToken);
         document.cookie = `kotbari_token=${savedToken}; path=/; SameSite=Lax; max-age=2592000`;
-      } else {
+      } else if (res.status === 401 || res.status === 403) {
         localStorage.removeItem('kotbari_auth_token');
         document.cookie = 'kotbari_token=; path=/; max-age=0';
         setUser(null);
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (usernameOrPhone: string, password: string) => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: usernameOrPhone, password })
@@ -81,12 +82,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (name: string, phone: string, area: string, password: string) => {
+  const register = async (name: string, phone: string, area: string, password: string, username?: string) => {
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, area, password })
+        body: JSON.stringify({ name, phone, area, password, username })
       });
 
       const data = await res.json();
@@ -114,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updatePrivacy = async (settings: Partial<MemberAccount>) => {
     if (!token) return false;
     try {
-      const res = await fetch('/api/auth/privacy', {
+      const res = await apiFetch('/api/auth/privacy', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = async (contactData: Partial<Contact>) => {
     if (!token || !user?.contactId) return false;
     try {
-      const res = await fetch(`/api/contacts/${user.contactId}`, {
+      const res = await apiFetch(`/api/contacts/${user.contactId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

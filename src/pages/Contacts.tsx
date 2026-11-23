@@ -101,13 +101,14 @@ export default function Contacts() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-serif italic tracking-tight text-[#E5E5E7]">Dawah Members & Contacts</h1>
-          <p className="text-white/40 mt-1">Track and manage growth journeys.</p>
+          <div className="eyebrow text-[#34D399] mb-1">MEMBER DIRECTORY</div>
+          <h1 className="text-3xl font-serif italic tracking-tight text-[#EDF4F0]">Dawah Members & Contacts</h1>
+          <p className="text-[#8EA39A] mt-1 text-sm">Track and manage growth journeys.</p>
         </div>
-        
+
         <Dialog>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 rounded-xl">
               <UserPlus className="w-4 h-4" />
               Add Brother
             </Button>
@@ -119,40 +120,40 @@ export default function Contacts() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Name</label>
-                <Input 
-                  placeholder="e.g. Abdullah" 
+                <label className="text-xs text-[#8EA39A]">Name</label>
+                <Input
+                  placeholder="e.g. Abdullah"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Phone</label>
-                <Input 
-                  placeholder="e.g. 01700000000" 
+                <label className="text-xs text-[#8EA39A]">Phone</label>
+                <Input
+                  placeholder="e.g. 01700000000"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Area</label>
-                <Input 
-                  placeholder="e.g. Mirpur, Dhaka" 
+                <label className="text-xs text-[#8EA39A]">Area</label>
+                <Input
+                  placeholder="e.g. Mirpur, Dhaka"
                   value={newArea}
                   onChange={(e) => setNewArea(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Priority Level</label>
-                <select 
-                  className="w-full h-10 rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm text-[#E5E5E7] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                <label className="text-xs text-[#8EA39A]">Priority Level</label>
+                <select
+                  className="w-full h-10 rounded-xl forest-input px-3 py-2 text-sm text-[#EDF4F0]"
                   value={newPriority}
                   onChange={(e) => setNewPriority(e.target.value)}
                 >
-                  <option value="growing">Growing</option>
-                  <option value="stable">Stable</option>
-                  <option value="needs_attention">Needs Attention</option>
-                  <option value="high_priority">High Priority</option>
+                  <option value="growing" className="bg-[#0A1210]">Growing</option>
+                  <option value="stable" className="bg-[#0A1210]">Stable</option>
+                  <option value="needs_attention" className="bg-[#0A1210]">Needs Attention</option>
+                  <option value="high_priority" className="bg-[#0A1210]">High Priority</option>
                 </select>
               </div>
             </div>
@@ -168,36 +169,36 @@ export default function Contacts() {
         </Dialog>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <div className="p-4 border-b border-white/5 flex gap-4 bg-white/[0.02] rounded-t-xl flex-col sm:flex-row">
+          <div className="p-4 border-b border-white/10 flex gap-4 bg-white/[0.025] flex-col sm:flex-row">
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-              <Input 
-                placeholder="Search by name or area..." 
-                className="pl-9 bg-[#0A0A0B] border-white/10"
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8EA39A]" />
+              <Input
+                placeholder="Search by name or area..."
+                className="pl-10"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
             <div className="flex items-center gap-2">
-              <select 
-                className="h-10 rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm text-[#E5E5E7] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              <select
+                className="h-10 rounded-xl forest-input px-3 py-2 text-sm text-[#EDF4F0]"
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
               >
-                <option value="all">All Priorities</option>
-                <option value="high_priority">High Priority</option>
-                <option value="needs_attention">Needs Attention</option>
-                <option value="growing">Growing</option>
-                <option value="stable">Stable</option>
+                <option value="all" className="bg-[#0A1210]">All Priorities</option>
+                <option value="high_priority" className="bg-[#0A1210]">High Priority</option>
+                <option value="needs_attention" className="bg-[#0A1210]">Needs Attention</option>
+                <option value="growing" className="bg-[#0A1210]">Growing</option>
+                <option value="stable" className="bg-[#0A1210]">Stable</option>
               </select>
             </div>
           </div>
-          
+
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
-              <thead className="bg-white/[0.03] text-white/40 text-[10px] uppercase tracking-wider">
+              <thead className="bg-white/[0.04] border-b border-white/10 text-[#8EA39A] text-[10px] font-mono uppercase tracking-wider">
                 <tr>
                   <th className="px-5 py-4 font-medium">সদস্যের নাম</th>
                   <th className="px-5 py-4 font-medium">ফোন ও ঠিকানা</th>
@@ -207,45 +208,45 @@ export default function Contacts() {
                   <th className="px-5 py-4 font-medium text-right">অ্যাকশন বাটন সমূহ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-white/10">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-white/40">Loading contacts...</td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-[#8EA39A]">Loading contacts...</td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-rose-500 bg-rose-500/5">{error}</td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-rose-300 bg-rose-500/10">{error}</td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-white/40">কোনো মেম্বার পাওয়া যায়নি।</td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-[#8EA39A]">কোনো মেম্বার পাওয়া যায়নি।</td>
                   </tr>
                 ) : (
                   filtered.map(contact => (
-                    <tr key={contact.id} className="hover:bg-white/[0.02] transition-colors group">
+                    <tr key={contact.id} className="hover:bg-white/[0.04] transition-colors group">
                       <td className="px-5 py-4">
-                        <Link to={`/contacts/${contact.id}`} className="font-semibold text-white hover:text-emerald-400 transition-colors block">
+                        <Link to={`/contacts/${contact.id}`} className="font-semibold text-[#EDF4F0] hover:text-[#B6F5D8] transition-colors block">
                           {contact.name}
                         </Link>
-                        <div className="text-white/40 text-[11px] mt-0.5 font-mono">
+                        <div className="text-[#8EA39A] text-[11px] mt-0.5 font-mono tabular-nums">
                           যুক্ত: {contact.firstContactDate || '২০২৬'}
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <div className="text-slate-300 font-mono text-xs">{contact.phone || '—'}</div>
-                        <div className="text-emerald-400/80 text-[11px] mt-0.5">{contact.area || 'এলাকা অনির্ধারিত'}</div>
+                        <div className="text-[#EDF4F0]/90 font-mono text-xs tabular-nums">{contact.phone || '—'}</div>
+                        <div className="text-[#34D399] text-[11px] mt-0.5">{contact.area || 'এলাকা অনির্ধারিত'}</div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-300 font-medium max-w-xs truncate">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#34D399]/12 border border-[#34D399]/30 rounded-full text-xs text-[#B6F5D8] font-medium max-w-xs truncate">
                           {STAGES[contact.currentStage - 1] || `স্টেজ ${contact.currentStage}`}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-center">
                         <div className="inline-flex flex-col items-center">
-                          <span className="font-bold text-white text-xs">{contact.growthScore || 0}%</span>
-                          <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
-                            <div 
-                              className="bg-emerald-500 h-full rounded-full" 
+                          <span className="font-bold text-[#EDF4F0] text-xs font-mono tabular-nums">{contact.growthScore || 0}%</span>
+                          <div className="w-16 bg-white/10 h-1.5 rounded-full overflow-hidden mt-1">
+                            <div
+                              className="bg-gradient-to-r from-[#0E9F6E] to-[#34D399] h-full rounded-full"
                               style={{ width: `${Math.min(100, Math.max(5, contact.growthScore || 0))}%` }}
                             />
                           </div>
@@ -260,18 +261,18 @@ export default function Contacts() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 px-2 text-[11px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 rounded-lg gap-1"
+                              className="h-7 px-2.5 text-[11px] bg-[#34D399]/15 hover:bg-[#34D399]/25 text-[#B6F5D8] border border-[#34D399]/35 rounded-lg gap-1"
                               onClick={() => setVoiceMember(contact)}
                               title="AI ভয়েস নোট"
                             >
-                              <Mic className="w-3 h-3" />
+                              <Mic className="w-3 h-3 text-[#34D399]" />
                               Voice
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/60 rounded-lg"
+                            className="h-7 px-2.5 text-[11px] bg-white/[0.05] hover:bg-[#34D399]/20 hover:text-[#B6F5D8] text-[#EDF4F0]/80 border border-white/10 rounded-lg"
                             onClick={() => navigate(`/contacts/${contact.id}?tab=overview`)}
                           >
                             Overview
@@ -279,7 +280,7 @@ export default function Contacts() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/60 rounded-lg"
+                            className="h-7 px-2.5 text-[11px] bg-white/[0.05] hover:bg-[#34D399]/20 hover:text-[#B6F5D8] text-[#EDF4F0]/80 border border-white/10 rounded-lg"
                             onClick={() => navigate(`/contacts/${contact.id}?tab=journey`)}
                           >
                             Growth Journey
@@ -287,7 +288,7 @@ export default function Contacts() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700/60 rounded-lg"
+                            className="h-7 px-2.5 text-[11px] bg-white/[0.05] hover:bg-[#34D399]/20 hover:text-[#B6F5D8] text-[#EDF4F0]/80 border border-white/10 rounded-lg"
                             onClick={() => navigate(`/contacts/${contact.id}?tab=salah`)}
                           >
                             Salah Tracking
@@ -295,15 +296,15 @@ export default function Contacts() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 rounded-lg"
+                            className="h-7 px-2.5 text-[11px] bg-white/[0.05] hover:bg-white/10 text-[#EDF4F0]/80 border border-white/10 rounded-lg"
                             onClick={() => navigate(`/contacts/${contact.id}?tab=edit`)}
                           >
                             Edit
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-7 w-7 p-0 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg ml-1"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-rose-300/70 hover:text-rose-200 hover:bg-rose-500/15 rounded-lg ml-1"
                             onClick={() => setContactToDelete(contact.id)}
                             title="Delete"
                           >
@@ -317,38 +318,38 @@ export default function Contacts() {
               </tbody>
             </table>
           </div>
-          
-          <div className="md:hidden flex flex-col divide-y divide-white/5">
+
+          <div className="md:hidden flex flex-col divide-y divide-white/10">
             {loading ? (
-              <div className="p-8 text-center text-white/40">Loading contacts...</div>
+              <div className="p-8 text-center text-[#8EA39A]">Loading contacts...</div>
             ) : error ? (
-              <div className="p-8 text-center text-rose-500 bg-rose-500/5">{error}</div>
+              <div className="p-8 text-center text-rose-300 bg-rose-500/10">{error}</div>
             ) : filtered.length === 0 ? (
-              <div className="p-8 text-center text-white/40">কোনো মেম্বার পাওয়া যায়নি।</div>
+              <div className="p-8 text-center text-[#8EA39A]">কোনো মেম্বার পাওয়া যায়নি।</div>
             ) : (
               filtered.map(contact => (
-                <div 
-                  key={contact.id} 
-                  className="p-4 flex flex-col gap-3 bg-slate-900/40"
+                <div
+                  key={contact.id}
+                  className="p-4 flex flex-col gap-3"
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="font-semibold text-white text-base">{contact.name}</div>
-                      <div className="text-emerald-400 text-xs font-mono mt-0.5">{contact.phone || 'ফোন নেই'} • {contact.area || 'এলাকা নেই'}</div>
+                      <div className="font-semibold text-[#EDF4F0] text-base">{contact.name}</div>
+                      <div className="text-[#34D399] text-xs font-mono mt-0.5">{contact.phone || 'ফোন নেই'} • {contact.area || 'এলাকা নেই'}</div>
                     </div>
                     <PriorityBadge level={contact.priorityLevel} />
                   </div>
-                  
-                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+
+                  <div className="p-3 rounded-2xl glass-2 flex items-center justify-between">
                     <div>
-                      <div className="text-[10px] text-slate-400">গ্রোথ স্টেজ:</div>
-                      <div className="text-xs font-medium text-emerald-300">
+                      <div className="text-[10px] text-[#8EA39A]">গ্রোথ স্টেজ:</div>
+                      <div className="text-xs font-medium text-[#B6F5D8]">
                         {STAGES[contact.currentStage - 1] || `স্টেজ ${contact.currentStage}`}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-[10px] text-slate-400">অগ্রগতি:</div>
-                      <div className="text-xs font-bold text-white">{contact.growthScore || 0}%</div>
+                      <div className="text-[10px] text-[#8EA39A]">অগ্রগতি:</div>
+                      <div className="text-xs font-bold text-[#EDF4F0] font-mono tabular-nums">{contact.growthScore || 0}%</div>
                     </div>
                   </div>
 
@@ -356,28 +357,28 @@ export default function Contacts() {
                   <div className={`grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 pt-1`}>
                     <button
                       type="button"
-                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
+                      className="py-1.5 px-2 text-[11px] font-medium glass-2 hover:border-[#34D399]/35 rounded-xl text-[#EDF4F0] text-center"
                       onClick={() => navigate(`/contacts/${contact.id}?tab=overview`)}
                     >
                       Overview
                     </button>
                     <button
                       type="button"
-                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
+                      className="py-1.5 px-2 text-[11px] font-medium glass-2 hover:border-[#34D399]/35 rounded-xl text-[#EDF4F0] text-center"
                       onClick={() => navigate(`/contacts/${contact.id}?tab=journey`)}
                     >
                       Journey
                     </button>
                     <button
                       type="button"
-                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-emerald-600 rounded-lg text-slate-200 text-center"
+                      className="py-1.5 px-2 text-[11px] font-medium glass-2 hover:border-[#34D399]/35 rounded-xl text-[#EDF4F0] text-center"
                       onClick={() => navigate(`/contacts/${contact.id}?tab=salah`)}
                     >
                       Salah
                     </button>
                     <button
                       type="button"
-                      className="py-1.5 px-2 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 text-center"
+                      className="py-1.5 px-2 text-[11px] font-medium glass-2 hover:border-white/25 rounded-xl text-[#EDF4F0] text-center"
                       onClick={() => navigate(`/contacts/${contact.id}?tab=edit`)}
                     >
                       Edit
@@ -385,7 +386,7 @@ export default function Contacts() {
                     {isAdmin && (
                       <button
                         type="button"
-                        className="py-1.5 px-2 text-[11px] font-medium bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 rounded-lg text-emerald-300 text-center inline-flex items-center justify-center gap-1"
+                        className="py-1.5 px-2 text-[11px] font-medium bg-[#34D399]/15 border border-[#34D399]/35 hover:bg-[#34D399]/25 rounded-xl text-[#B6F5D8] text-center inline-flex items-center justify-center gap-1"
                         onClick={() => setVoiceMember(contact)}
                         title="ভয়েস নোট রেকর্ড করুন"
                       >
@@ -401,7 +402,7 @@ export default function Contacts() {
 
         </CardContent>
       </Card>
-      
+
       <Dialog open={!!contactToDelete} onOpenChange={(open) => !open && setContactToDelete(null)}>
         <DialogContent>
           <DialogHeader>
@@ -412,7 +413,7 @@ export default function Contacts() {
           </DialogHeader>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="ghost" onClick={() => setContactToDelete(null)}>Cancel</Button>
-            <Button variant="destructive" className="bg-rose-500 hover:bg-rose-600 text-white" onClick={() => contactToDelete && handleDelete(contactToDelete)}>Delete</Button>
+            <Button variant="destructive" onClick={() => contactToDelete && handleDelete(contactToDelete)}>Delete</Button>
           </div>
         </DialogContent>
       </Dialog>

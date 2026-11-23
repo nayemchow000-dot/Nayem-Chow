@@ -99,12 +99,12 @@ export default function Settings() {
 
   const renderImagePreview = (url: string, label: string) => {
     if (!url) return (
-      <div className="h-16 w-16 flex-shrink-0 rounded-md bg-white/5 border border-white/10 flex items-center justify-center text-[10px] text-white/40 text-center p-1">
+      <div className="h-16 w-16 flex-shrink-0 rounded-xl glass-2 flex items-center justify-center text-[10px] text-[#5D726A] text-center p-1">
         No Image
       </div>
     );
     return (
-      <div className="h-16 w-16 flex-shrink-0 rounded-md border border-white/10 bg-white/5 p-1 flex items-center justify-center">
+      <div className="h-16 w-16 flex-shrink-0 rounded-xl glass-2 p-1 flex items-center justify-center">
         <img src={url} alt={label} className="max-h-full max-w-full object-contain" />
       </div>
     );
@@ -114,26 +114,27 @@ export default function Settings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-serif text-white flex items-center gap-3">
-            <SettingsIcon className="w-6 h-6 text-emerald-500" />
+          <span className="eyebrow">PREFERENCES & BRANDING</span>
+          <h1 className="text-2xl sm:text-3xl font-serif italic text-[#EDF4F0] flex items-center gap-3 mt-1">
+            <SettingsIcon className="w-6 h-6 text-[#34D399]" />
             System Settings
           </h1>
-          <p className="text-white/60 mt-1">Manage your application preferences and visual identity</p>
+          <p className="text-[#8EA39A] mt-1 text-sm">Manage your application preferences and visual identity</p>
         </div>
       </div>
       
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         
         {/* Website Branding Card */}
-        <Card className="bg-[#121214] border-white/5">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <LayoutTemplate className="w-5 h-5 text-emerald-400" />
+              <LayoutTemplate className="w-5 h-5 text-[#34D399]" />
               Website Branding
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-white/60 mb-4">
+            <p className="text-sm text-[#8EA39A] mb-4">
               Upload your logos directly from your device.
             </p>
             
@@ -141,7 +142,7 @@ export default function Settings() {
               <div key={field} className="flex gap-4 items-start">
                 {renderImagePreview(brandingForm[field as keyof typeof brandingForm], field)}
                 <div className="flex-1">
-                  <label className="block text-xs font-medium text-white/60 mb-1 capitalize">
+                  <label className="block text-xs font-medium text-[#8EA39A] mb-1 capitalize">
                     {field.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   <input 
@@ -157,7 +158,7 @@ export default function Settings() {
                         reader.readAsDataURL(file);
                       }
                     }}
-                    className="w-full bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-2 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 focus:outline-none focus:border-emerald-500/50"
+                    className="w-full forest-input rounded-xl text-sm px-3 py-2 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-[#34D399]/15 file:text-[#B6F5D8] hover:file:bg-[#34D399]/25"
                   />
                 </div>
               </div>
@@ -166,7 +167,7 @@ export default function Settings() {
             <Button 
               onClick={handleSaveBranding} 
               disabled={savingBranding}
-              className="bg-emerald-500 text-white hover:bg-emerald-600 w-full mt-4 flex items-center justify-center gap-2"
+              className="w-full mt-4 flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
               {brandingSaved ? 'Saved!' : 'Save Branding'}
@@ -175,15 +176,15 @@ export default function Settings() {
         </Card>
 
         {/* Visual Assets Card */}
-        <Card className="bg-[#121214] border-white/5">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-emerald-400" />
+              <ImageIcon className="w-5 h-5 text-[#34D399]" />
               Visual Assets
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-white/60 mb-4">
+            <p className="text-sm text-[#8EA39A] mb-4">
               Upload decorative images for backgrounds and corners across the app.
             </p>
 
@@ -191,7 +192,7 @@ export default function Settings() {
               <div key={field} className="flex gap-4 items-start">
                 {renderImagePreview(brandingForm[field as keyof typeof brandingForm], field)}
                 <div className="flex-1">
-                  <label className="block text-xs font-medium text-white/60 mb-1 capitalize">
+                  <label className="block text-xs font-medium text-[#8EA39A] mb-1 capitalize">
                     {field.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   <input 
@@ -207,7 +208,7 @@ export default function Settings() {
                         reader.readAsDataURL(file);
                       }
                     }}
-                    className="w-full bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-2 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 focus:outline-none focus:border-emerald-500/50"
+                    className="w-full forest-input rounded-xl text-sm px-3 py-2 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-[#34D399]/15 file:text-[#B6F5D8] hover:file:bg-[#34D399]/25"
                   />
                 </div>
               </div>
@@ -216,7 +217,7 @@ export default function Settings() {
             <Button 
               onClick={handleSaveBranding} 
               disabled={savingBranding}
-              className="bg-emerald-500 text-white hover:bg-emerald-600 w-full mt-4 flex items-center justify-center gap-2"
+              className="w-full mt-4 flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
               {brandingSaved ? 'Saved!' : 'Save Visual Assets'}
@@ -225,21 +226,22 @@ export default function Settings() {
         </Card>
 
         {/* Data Management Card */}
-        <Card className="bg-[#121214] border-white/5">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Shield className="w-5 h-5 text-emerald-400" />
+              <Shield className="w-5 h-5 text-[#34D399]" />
               Data Management
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-white/60 mb-4">
+            <p className="text-sm text-[#8EA39A] mb-4">
               Export your Dawah members data for backup or offline analysis.
             </p>
             <Button 
+              variant="outline"
               onClick={handleExport} 
               disabled={exporting}
-              className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 w-full flex items-center justify-center gap-2"
+              className="w-full flex items-center justify-center gap-2 border-[#34D399]/30 text-[#B6F5D8] hover:bg-[#34D399]/15"
             >
               <Download className="w-4 h-4" />
               {exporting ? 'Exporting...' : 'Export Contacts (CSV)'}
@@ -248,38 +250,38 @@ export default function Settings() {
         </Card>
 
         {/* Preferences Card */}
-        <Card className="bg-[#121214] border-white/5">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <SettingsIcon className="w-5 h-5 text-emerald-400" />
+              <SettingsIcon className="w-5 h-5 text-[#34D399]" />
               Preferences
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Moon className="w-5 h-5 text-white/40" />
+                <Moon className="w-5 h-5 text-[#8EA39A]" />
                 <div>
-                  <div className="text-sm font-medium text-white">Theme</div>
-                  <div className="text-xs text-white/40">Application appearance</div>
+                  <div className="text-sm font-medium text-[#EDF4F0]">Theme</div>
+                  <div className="text-xs text-[#8EA39A]">Application appearance</div>
                 </div>
               </div>
               <select 
                 value={theme}
                 onChange={(e) => setTheme(e.target.value)}
-                className="bg-[#0F0F12] border border-white/10 rounded-md text-sm text-white px-3 py-1.5 focus:outline-none focus:border-emerald-500/50"
+                className="forest-input rounded-xl text-sm px-3 py-1.5"
               >
-                <option value="dark">Dark Theme</option>
-                <option value="light" disabled>Light Theme (Coming Soon)</option>
+                <option value="dark" className="bg-[#0A1210]">Dark Theme</option>
+                <option value="light" disabled className="bg-[#0A1210]">Light Theme (Coming Soon)</option>
               </select>
             </div>
             
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-white/40" />
+                <Bell className="w-5 h-5 text-[#8EA39A]" />
                 <div>
-                  <div className="text-sm font-medium text-white">Notifications</div>
-                  <div className="text-xs text-white/40">In-app alerts and reminders</div>
+                  <div className="text-sm font-medium text-[#EDF4F0]">Notifications</div>
+                  <div className="text-xs text-[#8EA39A]">In-app alerts and reminders</div>
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -289,14 +291,14 @@ export default function Settings() {
                   checked={notifications}
                   onChange={(e) => setNotifications(e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                <div className="w-11 h-6 bg-white/15 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#34D399]"></div>
               </label>
             </div>
             
-            <div className="pt-4 border-t border-white/5">
+            <div className="pt-4 border-t border-white/[0.08]">
               <Button 
                 onClick={handleSave} 
-                className="bg-emerald-500 text-white hover:bg-emerald-600 w-full flex items-center justify-center gap-2"
+                className="w-full flex items-center justify-center gap-2"
               >
                 <Save className="w-4 h-4" />
                 {saved ? 'Saved!' : 'Save Preferences'}

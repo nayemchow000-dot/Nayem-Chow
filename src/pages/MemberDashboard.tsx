@@ -7,6 +7,7 @@ import {
   Settings, Key, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles, HeartHandshake
 } from 'lucide-react';
 import { Link } from 'react-router';
+import { apiFetch } from '../lib/api';
 
 export default function MemberDashboard() {
   const { user, refreshUser, updatePrivacy, updateProfile } = useAuth();
@@ -72,10 +73,7 @@ export default function MemberDashboard() {
 
   const fetchTodaySalah = async (contactId: string) => {
     try {
-      const token = localStorage.getItem('kotbari_auth_token');
-      const res = await fetch(`/api/contacts/${contactId}/salah`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await apiFetch(`/api/contacts/${contactId}/salah`);
       if (res.ok) {
         const records = await res.json();
         const todayStr = new Date().toISOString().split('T')[0];
@@ -102,13 +100,11 @@ export default function MemberDashboard() {
 
     try {
       setSavingSalah(true);
-      const token = localStorage.getItem('kotbari_auth_token');
       const todayStr = new Date().toISOString().split('T')[0];
-      await fetch(`/api/contacts/${user.contactId}/salah`, {
+      await apiFetch(`/api/contacts/${user.contactId}/salah`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           date: todayStr,
@@ -166,12 +162,10 @@ export default function MemberDashboard() {
     }
 
     try {
-      const token = localStorage.getItem('kotbari_auth_token');
-      const res = await fetch('/api/auth/password', {
+      const res = await apiFetch('/api/auth/password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ currentPassword, newPassword })
       });
@@ -198,51 +192,51 @@ export default function MemberDashboard() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {/* Top Banner & Profile Overview */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="glass rounded-[24px] p-6 sm:p-7 relative overflow-hidden">
+        <div className="absolute -top-12 -right-12 w-80 h-80 bg-[#34D399]/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="flex items-start sm:items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-emerald-950/60 flex-shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#34D399] to-[#0E9F6E] flex items-center justify-center text-[#04140D] text-2xl font-bold shadow-[0_12px_28px_rgba(52,211,153,0.28)] flex-shrink-0">
               {contact?.name ? contact.name.charAt(0) : 'দ'}
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h1 className="text-xl sm:text-2xl font-bold text-white">
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <h1 className="text-xl sm:text-2xl font-serif italic text-[#EDF4F0]">
                   {contact?.name || user?.username || 'দাওয়াহ সদস্য'}
                 </h1>
                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   user?.role === 'admin' 
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                    : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                    ? 'bg-[#34D399]/15 text-[#B6F5D8] border border-[#34D399]/35' 
+                    : 'bg-white/[0.08] text-[#EDF4F0] border border-white/15'
                 }`}>
                   {user?.role === 'admin' ? 'অ্যাডমিন (Admin)' : 'সদস্য (Member)'}
                 </span>
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 ${
+                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 ${
                   isPublic 
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    ? 'bg-[#34D399]/15 text-[#B6F5D8] border border-[#34D399]/30' 
+                    : 'bg-[#F4A85E]/15 text-[#F4A85E] border border-[#F4A85E]/35'
                 }`}>
                   {isPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                   {isPublic ? 'পাবলিক প্রোফাইল' : 'ব্যক্তিগত / প্রাইভেট'}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-[#8EA39A]">
                 {contact?.area && (
                   <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                    <MapPin className="w-3.5 h-3.5 text-[#34D399]" />
                     {contact.area}
                   </span>
                 )}
                 {contact?.phone && (
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="flex items-center gap-1 font-mono tabular-nums">
+                    <Phone className="w-3.5 h-3.5 text-[#34D399]" />
                     {contact.phone}
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span className="flex items-center gap-1 tabular-nums">
+                  <Calendar className="w-3.5 h-3.5 text-[#34D399]" />
                   সংযুক্ত: {contact?.firstContactDate || '২০২৬'}
                 </span>
               </div>
@@ -252,16 +246,16 @@ export default function MemberDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowPasswordModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-slate-700"
+              className="px-3.5 py-2 rounded-xl border border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-[#EDF4F0] text-xs font-medium transition-colors flex items-center gap-1.5"
             >
-              <Key className="w-3.5 h-3.5 text-slate-400" />
+              <Key className="w-3.5 h-3.5 text-[#8EA39A]" />
               পাসওয়ার্ড পরিবর্তন
             </button>
             <a
               href={publicUrl}
               target="_blank"
               rel="noreferrer"
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-950/40"
+              className="px-3.5 py-2 rounded-xl forest-btn-primary text-xs transition-all flex items-center gap-1.5"
             >
               <Eye className="w-3.5 h-3.5" />
               পাবলিক ভিউ দেখুন
@@ -273,52 +267,52 @@ export default function MemberDashboard() {
       {/* Grid: Growth & Today's Salah */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Growth Stage Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
+        <div className="glass rounded-[22px] p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-emerald-400" />
-              <h2 className="font-semibold text-white">আমার বর্তমান গ্রোথ স্টেজ</h2>
+              <Award className="w-5 h-5 text-[#34D399]" />
+              <h2 className="font-semibold text-[#EDF4F0]">আমার বর্তমান গ্রোথ স্টেজ</h2>
             </div>
-            <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-[#34D399]/15 border border-[#34D399]/30 text-[#B6F5D8] font-semibold tabular-nums">
               স্টেজ #{contact?.currentStage || 1}
             </span>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 mb-4">
-            <div className="text-sm font-medium text-emerald-300 mb-1">{stageName}</div>
-            <div className="flex items-center justify-between text-xs text-slate-400 mt-3">
+          <div className="p-4 rounded-2xl glass-2 mb-4">
+            <div className="text-sm font-medium text-[#B6F5D8] mb-1">{stageName}</div>
+            <div className="flex items-center justify-between text-xs text-[#8EA39A] mt-3">
               <span>গ্রোথ স্কোর (অগ্রগতি)</span>
-              <span className="font-bold text-white text-sm">{contact?.growthScore || 0}%</span>
+              <span className="font-bold text-[#EDF4F0] text-sm tabular-nums">{contact?.growthScore || 0}%</span>
             </div>
-            <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden mt-1.5">
+            <div className="w-full bg-white/[0.08] h-2.5 rounded-full overflow-hidden mt-1.5">
               <div
-                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-[#34D399] to-[#B6F5D8] h-full rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(5, contact?.growthScore || 0))}%` }}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-              <div className="text-slate-400">সাপ্তাহিক পরিবর্তন</div>
-              <div className="text-base font-semibold text-emerald-400 mt-0.5">
+            <div className="p-3.5 rounded-2xl glass-2">
+              <div className="text-[#8EA39A]">সাপ্তাহিক পরিবর্তন</div>
+              <div className="text-base font-semibold text-[#34D399] mt-0.5 tabular-nums">
                 +{contact?.weeklyChange || 0}%
               </div>
             </div>
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-              <div className="text-slate-400">মাসিক পরিবর্তন</div>
-              <div className="text-base font-semibold text-teal-400 mt-0.5">
+            <div className="p-3.5 rounded-2xl glass-2">
+              <div className="text-[#8EA39A]">মাসিক পরিবর্তন</div>
+              <div className="text-base font-semibold text-[#B6F5D8] mt-0.5 tabular-nums">
                 +{contact?.monthlyChange || 0}%
               </div>
             </div>
           </div>
 
           {contact?.categoryTags && contact.categoryTags.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-800">
-              <div className="text-xs text-slate-400 mb-2 font-medium">দায়িত্ব ও ক্যাটাগরি:</div>
+            <div className="mt-4 pt-4 border-t border-white/[0.08]">
+              <div className="text-xs text-[#8EA39A] mb-2 font-medium">দায়িত্ব ও ক্যাটাগরি:</div>
               <div className="flex flex-wrap gap-1.5">
                 {contact.categoryTags.map((tag: string, idx: number) => (
-                  <span key={idx} className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-xs border border-slate-700/60">
+                  <span key={idx} className="px-2.5 py-0.5 rounded-full bg-white/[0.06] text-[#EDF4F0] text-xs border border-white/10">
                     {tag}
                   </span>
                 ))}
@@ -328,20 +322,20 @@ export default function MemberDashboard() {
         </div>
 
         {/* Today's Salah Tracker */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="glass rounded-[22px] p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <HeartHandshake className="w-5 h-5 text-emerald-400" />
-                <h2 className="font-semibold text-white">আজকের ৫ ওয়াক্ত সালাহ ট্র্যাকিং</h2>
+                <HeartHandshake className="w-5 h-5 text-[#34D399]" />
+                <h2 className="font-semibold text-[#EDF4F0]">আজকের ৫ ওয়াক্ত সালাহ ট্র্যাকিং</h2>
               </div>
               {savingSalah && (
-                <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                <span className="text-[11px] text-[#34D399] flex items-center gap-1">
                   <RefreshCw className="w-3 h-3 animate-spin" /> সংরক্ষণ হচ্ছে...
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-[#8EA39A] mb-4">
               ওয়াক্ত অনুযায়ী সালাহ আদায় শেষে ট্যাপ করে মার্ক করুন:
             </p>
 
@@ -359,10 +353,10 @@ export default function MemberDashboard() {
                     key={prayer.key}
                     type="button"
                     onClick={() => handleToggleSalah(prayer.key as any)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-sm ${
+                    className={`w-full flex items-center justify-between p-2.5 rounded-2xl border transition-all text-sm ${
                       isChecked
-                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                        ? 'bg-[#34D399]/12 border-[#34D399]/40 text-[#B6F5D8]'
+                        : 'glass-2 text-[#EDF4F0]/85 hover:border-white/25'
                     }`}
                   >
                     <span className="flex items-center gap-2.5">
@@ -370,7 +364,7 @@ export default function MemberDashboard() {
                       <span className="font-medium">{prayer.label}</span>
                     </span>
                     <span className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
-                      isChecked ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-500'
+                      isChecked ? 'bg-[#34D399] text-[#04140D]' : 'bg-white/[0.08] text-[#8EA39A]'
                     }`}>
                       {isChecked ? <Check className="w-4 h-4 stroke-[3]" /> : <Circle className="w-3.5 h-3.5" />}
                     </span>
@@ -380,36 +374,36 @@ export default function MemberDashboard() {
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className="mt-4 pt-3 border-t border-white/[0.08] text-[11px] text-[#8EA39A] flex items-center justify-between tabular-nums">
             <span>আজকের সম্পন্ন: {Object.values(todaySalah).filter(Boolean).length} / ৫ ওয়াক্ত</span>
-            <span className="text-emerald-400 font-medium">মাশাআল্লাহ</span>
+            <span className="text-[#34D399] font-medium">মাশাআল্লাহ</span>
           </div>
         </div>
       </div>
 
       {/* Privacy & Public Profile Settings */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+      <div className="glass rounded-[24px] p-6 sm:p-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/[0.08]">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck className="w-6 h-6 text-emerald-400" />
-              <h2 className="text-lg sm:text-xl font-bold text-white">প্রাইভেসি ও পাবলিক প্রোফাইল নিয়ন্ত্রণ</h2>
+              <ShieldCheck className="w-6 h-6 text-[#34D399]" />
+              <h2 className="text-lg sm:text-xl font-bold text-[#EDF4F0]">প্রাইভেসি ও পাবলিক প্রোফাইল নিয়ন্ত্রণ</h2>
             </div>
-            <p className="text-xs sm:text-sm text-slate-400">
+            <p className="text-xs sm:text-sm text-[#8EA39A]">
               আপনি নিজে ঠিক করতে পারবেন অন্যরা আপনার কোন তথ্য দেখতে পারবে এবং কোন তথ্য সম্পূর্ণ গোপন থাকবে।
             </p>
           </div>
 
           {/* Master Public / Private Toggle */}
-          <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
-            <span className="text-xs font-medium text-slate-300">
+          <div className="flex items-center gap-3 glass-2 px-3 py-2 rounded-2xl">
+            <span className="text-xs font-medium text-[#EDF4F0]">
               {isPublic ? 'পাবলিক (সক্রিয়)' : 'প্রাইভেট (লুকানো)'}
             </span>
             <button
               type="button"
               onClick={() => setIsPublic(!isPublic)}
               className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
-                isPublic ? 'bg-emerald-600' : 'bg-slate-700'
+                isPublic ? 'bg-[#34D399]' : 'bg-white/15'
               }`}
             >
               <div
@@ -422,29 +416,29 @@ export default function MemberDashboard() {
         </div>
 
         {/* Shareable Link Box */}
-        <div className="my-6 p-4 rounded-xl bg-slate-950 border border-slate-800">
-          <label className="block text-xs font-semibold text-slate-300 mb-2">
+        <div className="my-6 p-4 rounded-2xl glass-2">
+          <label className="block text-xs font-semibold text-[#EDF4F0] mb-2">
             আপনার শেয়ারেবল পাবলিক প্রোফাইল লিংক:
           </label>
           <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 flex items-center bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 overflow-hidden">
-              <Globe className="w-4 h-4 text-emerald-400 mr-2 flex-shrink-0" />
-              <span className="truncate">{publicUrl}</span>
+            <div className="flex-1 flex items-center forest-input rounded-xl px-3 py-2 text-xs text-[#EDF4F0] overflow-hidden">
+              <Globe className="w-4 h-4 text-[#34D399] mr-2 flex-shrink-0" />
+              <span className="truncate font-mono">{publicUrl}</span>
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-slate-700"
+                className="px-3 py-2 rounded-xl border border-white/15 bg-white/[0.06] hover:bg-white/[0.12] text-[#EDF4F0] text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-[#34D399]" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'কপি হয়েছে!' : 'লিংক কপি করুন'}</span>
               </button>
               <a
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-emerald-500/30"
+                className="px-3 py-2 rounded-xl bg-[#34D399]/15 hover:bg-[#34D399]/25 text-[#B6F5D8] text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-[#34D399]/35"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>ভিজিট করুন</span>
@@ -452,7 +446,7 @@ export default function MemberDashboard() {
             </div>
           </div>
           {!isPublic && (
-            <p className="text-[11px] text-amber-400/90 mt-2 flex items-center gap-1">
+            <p className="text-[11px] text-[#F4A85E] mt-2 flex items-center gap-1">
               <Lock className="w-3 h-3" />
               বর্তমানে আপনার প্রোফাইলটি প্রাইভেট রয়েছে। পাবলিক লিংকে ভিজিট করলে প্রাইভেট বার্তা দেখাবে।
             </p>
@@ -461,104 +455,104 @@ export default function MemberDashboard() {
 
         {/* Granular Privacy Toggles */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-white">পাবলিক প্রোফাইলে কোন তথ্যগুলো দেখাবেন?</h3>
+          <h3 className="text-sm font-semibold text-[#EDF4F0]">পাবলিক প্রোফাইলে কোন তথ্যগুলো দেখাবেন?</h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Toggle 1 */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">প্রোফাইল তথ্য (নাম ও ছবি)</div>
-                <div className="text-[11px] text-slate-400">পাবলিক ভিজিটরে আপনার নাম প্রদর্শিত হবে</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">প্রোফাইল তথ্য (নাম ও ছবি)</div>
+                <div className="text-[11px] text-[#8EA39A]">পাবলিক ভিজিটরে আপনার নাম প্রদর্শিত হবে</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacyProfileInfo}
                 onChange={e => setPrivacyProfileInfo(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
 
             {/* Toggle 2: Phone */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">ফোন নম্বর (Phone Number)</div>
-                <div className="text-[11px] text-slate-400">ডিফল্টভাবে বন্ধ থাকে নিরাপত্তার জন্য</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">ফোন নম্বর (Phone Number)</div>
+                <div className="text-[11px] text-[#8EA39A]">ডিফল্টভাবে বন্ধ থাকে নিরাপত্তার জন্য</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacyPhone}
                 onChange={e => setPrivacyPhone(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
 
             {/* Toggle 3: Area */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">এলাকা / ঠিকানা (Area)</div>
-                <div className="text-[11px] text-slate-400">আপনার বাসস্থানের এলাকা দেখাবে</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">এলাকা / ঠিকানা (Area)</div>
+                <div className="text-[11px] text-[#8EA39A]">আপনার বাসস্থানের এলাকা দেখাবে</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacyArea}
                 onChange={e => setPrivacyArea(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
 
             {/* Toggle 4: Growth Stage */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">গ্রোথ স্টেজ ও অগ্রগতি স্কোর</div>
-                <div className="text-[11px] text-slate-400">বর্তমানে কোন স্টেজে আছেন তা দেখাবে</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">গ্রোথ স্টেজ ও অগ্রগতি স্কোর</div>
+                <div className="text-[11px] text-[#8EA39A]">বর্তমানে কোন স্টেজে আছেন তা দেখাবে</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacyGrowthStage}
                 onChange={e => setPrivacyGrowthStage(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
 
             {/* Toggle 5: Growth Journey */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">দাওয়াহ জার্নি ও দায়িত্ব সমূহ</div>
-                <div className="text-[11px] text-slate-400">মুভমেন্টে যুক্ত হওয়ার তারিখ ও দায়িত্বসমূহ</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">দাওয়াহ জার্নি ও দায়িত্ব সমূহ</div>
+                <div className="text-[11px] text-[#8EA39A]">মুভমেন্টে যুক্ত হওয়ার তারিখ ও দায়িত্বসমূহ</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacyGrowthJourney}
                 onChange={e => setPrivacyGrowthJourney(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
 
             {/* Toggle 6: Salah Tracking */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">সালাহ ট্র্যাকিং রেকর্ড</div>
-                <div className="text-[11px] text-slate-400">সালাহ আদায়ের পরিসংখ্যান প্রকাশ্যে প্রদর্শন</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">সালাহ ট্র্যাকিং রেকর্ড</div>
+                <div className="text-[11px] text-[#8EA39A]">সালাহ আদায়ের পরিসংখ্যান প্রকাশ্যে প্রদর্শন</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacySalahTracking}
                 onChange={e => setPrivacySalahTracking(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
 
             {/* Toggle 7: Activities */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 sm:col-span-2">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl glass-2 sm:col-span-2">
               <div>
-                <div className="text-xs font-medium text-slate-200">দাওয়াহ কার্যক্রমের রেকর্ড</div>
-                <div className="text-[11px] text-slate-400">মিটিং, তালীম বা অন্য দাওয়াহ সেশনের ইতিহাস</div>
+                <div className="text-xs font-medium text-[#EDF4F0]">দাওয়াহ কার্যক্রমের রেকর্ড</div>
+                <div className="text-[11px] text-[#8EA39A]">মিটিং, তালীম বা অন্য দাওয়াহ সেশনের ইতিহাস</div>
               </div>
               <input
                 type="checkbox"
                 checked={privacyActivities}
                 onChange={e => setPrivacyActivities(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                className="w-4 h-4 rounded accent-[#34D399]"
               />
             </div>
           </div>
@@ -566,11 +560,11 @@ export default function MemberDashboard() {
           {/* Custom Bio & Slug */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-[#EDF4F0] mb-1">
                 পাবলিক লিংক কাস্টমাইজ (URL Slug)
               </label>
               <div className="flex items-center">
-                <span className="bg-slate-800 px-2.5 py-2 rounded-l-xl text-xs text-slate-400 border border-r-0 border-slate-700">
+                <span className="bg-white/[0.06] px-2.5 py-2 rounded-l-xl text-xs text-[#8EA39A] border border-r-0 border-white/12 font-mono">
                   /p/
                 </span>
                 <input
@@ -578,13 +572,13 @@ export default function MemberDashboard() {
                   value={shareSlug}
                   onChange={e => setShareSlug(e.target.value)}
                   placeholder="যেমন: brother-naim"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-r-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 forest-input rounded-r-xl text-xs"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-[#EDF4F0] mb-1">
                 ব্যক্তিগত পরিচয় / বায়ো (Custom Bio)
               </label>
               <input
@@ -592,7 +586,7 @@ export default function MemberDashboard() {
                 value={customBio}
                 onChange={e => setCustomBio(e.target.value)}
                 placeholder="যেমন: কোটবাড়ি দাওয়াহ মুভমেন্টের সদস্য"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 forest-input rounded-xl text-xs"
               />
             </div>
           </div>
@@ -600,7 +594,7 @@ export default function MemberDashboard() {
           {/* Save Button */}
           <div className="pt-4 flex items-center justify-between">
             {privacySuccess ? (
-              <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+              <span className="text-xs text-[#34D399] font-medium flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" /> সেটিংস সফলভাবে সংরক্ষিত হয়েছে!
               </span>
             ) : <div />}
@@ -609,7 +603,7 @@ export default function MemberDashboard() {
               type="button"
               onClick={handleSavePrivacy}
               disabled={savingPrivacy}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition-colors flex items-center gap-2 shadow-lg shadow-emerald-950/30 disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl forest-btn-primary text-xs transition-all flex items-center gap-2 disabled:opacity-50"
             >
               {savingPrivacy ? (
                 <>
@@ -629,17 +623,17 @@ export default function MemberDashboard() {
 
       {/* Password Change Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-              <h3 className="font-semibold text-white flex items-center gap-2">
-                <Key className="w-4 h-4 text-emerald-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm">
+          <div className="glass-modal rounded-[22px] p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+              <h3 className="font-semibold text-[#EDF4F0] flex items-center gap-2">
+                <Key className="w-4 h-4 text-[#34D399]" />
                 পাসওয়ার্ড পরিবর্তন করুন
               </h3>
               <button
                 type="button"
                 onClick={() => setShowPasswordModal(false)}
-                className="text-slate-400 hover:text-white text-sm"
+                className="text-[#8EA39A] hover:text-[#EDF4F0] text-sm"
               >
                 ✕
               </button>
@@ -648,8 +642,8 @@ export default function MemberDashboard() {
             {passwordMsg && (
               <div className={`p-3 rounded-xl mb-4 text-xs ${
                 passwordMsg.type === 'success' 
-                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300' 
-                  : 'bg-rose-500/10 border border-rose-500/20 text-rose-300'
+                  ? 'bg-[#34D399]/15 border border-[#34D399]/35 text-[#B6F5D8]' 
+                  : 'bg-rose-500/15 border border-rose-400/35 text-rose-300'
               }`}>
                 {passwordMsg.text}
               </div>
@@ -657,37 +651,37 @@ export default function MemberDashboard() {
 
             <form onSubmit={handleChangePassword} className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-300 mb-1">বর্তমান পাসওয়ার্ড</label>
+                <label className="block text-xs text-[#8EA39A] mb-1">বর্তমান পাসওয়ার্ড</label>
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
                   placeholder="বর্তমান পাসওয়ার্ড দিন"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 forest-input rounded-xl text-xs"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">নতুন পাসওয়ার্ড</label>
+                <label className="block text-xs text-[#8EA39A] mb-1">নতুন পাসওয়ার্ড</label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
                   placeholder="কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 forest-input rounded-xl text-xs"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">নতুন পাসওয়ার্ড নিশ্চিত করুন</label>
+                <label className="block text-xs text-[#8EA39A] mb-1">নতুন পাসওয়ার্ড নিশ্চিত করুন</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
                   placeholder="পুনরায় নতুন পাসওয়ার্ড দিন"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 forest-input rounded-xl text-xs"
                   required
                 />
               </div>
@@ -696,13 +690,13 @@ export default function MemberDashboard() {
                 <button
                   type="button"
                   onClick={() => setShowPasswordModal(false)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs"
+                  className="px-3.5 py-2 rounded-xl border border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-[#EDF4F0] text-xs"
                 >
                   বাতিল
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium"
+                  className="px-4 py-2 rounded-xl forest-btn-primary text-xs"
                 >
                   আপডেট করুন
                 </button>

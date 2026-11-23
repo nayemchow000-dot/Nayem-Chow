@@ -35,6 +35,12 @@ export default function DawahChatbot() {
     }
   }, [messages, isOpen]);
 
+  useEffect(() => {
+    const handleOpenEvent = () => setIsOpen(true);
+    window.addEventListener('open-dawah-chatbot', handleOpenEvent);
+    return () => window.removeEventListener('open-dawah-chatbot', handleOpenEvent);
+  }, []);
+
   if (!user) return null;
 
   // Detect if currently viewing a contact profile to provide optional context
@@ -123,15 +129,15 @@ export default function DawahChatbot() {
   return (
     <div className="fixed bottom-5 right-5 z-40">
       {isOpen ? (
-        <div className="w-[calc(100vw-2rem)] sm:w-96 h-[520px] max-h-[80vh] bg-[#16161A] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="w-[calc(100vw-2rem)] sm:w-96 h-[520px] max-h-[80vh] glass-modal rounded-[22px] flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="px-4 py-3 border-b border-white/10 bg-[#0F0F12] flex items-center justify-between gap-2">
+          <div className="px-4 py-3.5 border-b border-white/10 bg-black/25 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-[#E5E5E7] flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="text-sm font-semibold text-[#EDF4F0] flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#34D399] shrink-0" />
                 <span className="truncate">দাওয়াহ AI সহায়ক</span>
               </div>
-              <div className="text-[11px] text-white/45 truncate">
+              <div className="text-[11px] text-[#8EA39A] truncate">
                 {modelMode === 'fast' ? 'দ্রুত মোড (Flash Lite)' : 'গভীর পরামর্শ মোড (Hydrogen)'}
               </div>
             </div>
@@ -139,16 +145,16 @@ export default function DawahChatbot() {
               <button
                 type="button"
                 onClick={() => setModelMode((m) => (m === 'standard' ? 'fast' : 'standard'))}
-                className="px-2 py-1 rounded border border-white/10 text-[11px] text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1"
+                className="px-2.5 py-1 rounded-lg border border-white/15 bg-white/[0.04] text-[11px] text-[#EDF4F0] hover:bg-white/10 flex items-center gap-1 transition-colors"
                 title="Switch response speed"
               >
-                <Zap className="w-3 h-3 text-emerald-400" />
+                <Zap className="w-3 h-3 text-[#34D399]" />
                 {modelMode === 'fast' ? 'Fast' : 'Deep'}
               </button>
               <button
                 type="button"
                 onClick={clearHistory}
-                className="p-1.5 text-white/45 hover:text-white rounded hover:bg-white/5"
+                className="p-1.5 text-[#8EA39A] hover:text-[#EDF4F0] rounded-lg hover:bg-white/10 transition-colors"
                 title="Clear conversation"
               >
                 <Trash2 className="w-4 h-4" />
@@ -156,7 +162,7 @@ export default function DawahChatbot() {
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 text-white/45 hover:text-white rounded hover:bg-white/5"
+                className="p-1.5 text-[#8EA39A] hover:text-[#EDF4F0] rounded-lg hover:bg-white/10 transition-colors"
                 aria-label="Close chat"
               >
                 <X className="w-4 h-4" />
@@ -165,17 +171,17 @@ export default function DawahChatbot() {
           </div>
 
           {/* Scrollable Message Thread */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0A0A0B]">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-black/20">
             {messages.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
                     msg.role === 'user'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-[#16161A] border border-white/10 text-[#E5E5E7]'
+                      ? 'forest-btn-primary'
+                      : 'glass-2 text-[#EDF4F0]'
                   }`}
                 >
                   {msg.text}
@@ -184,8 +190,8 @@ export default function DawahChatbot() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-[#16161A] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white/60 flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                <div className="glass-2 rounded-2xl px-3.5 py-2.5 text-xs text-[#8EA39A] flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#34D399]" />
                   <span>চিন্তা করছে...</span>
                 </div>
               </div>
@@ -194,13 +200,13 @@ export default function DawahChatbot() {
 
           {/* Quick Prompts */}
           {messages.length <= 2 && (
-            <div className="px-3 py-2 border-t border-white/5 bg-[#121215] flex gap-1.5 overflow-x-auto">
+            <div className="px-3 py-2 border-t border-white/10 bg-black/20 flex gap-1.5 overflow-x-auto">
               {quickPrompts.map((p, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => sendMessage(p)}
-                  className="text-[11px] text-white/70 hover:text-emerald-400 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-md px-2.5 py-1 whitespace-nowrap shrink-0 transition-colors"
+                  className="text-[11px] text-[#EDF4F0]/85 hover:text-[#B6F5D8] glass-2 hover:border-[#34D399]/35 rounded-lg px-2.5 py-1 whitespace-nowrap shrink-0 transition-colors"
                 >
                   {p}
                 </button>
@@ -214,19 +220,19 @@ export default function DawahChatbot() {
               e.preventDefault();
               sendMessage();
             }}
-            className="p-3 border-t border-white/10 bg-[#0F0F12] flex items-center gap-2"
+            className="p-3 border-t border-white/10 bg-black/25 flex items-center gap-2"
           >
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="আপনার প্রশ্ন লিখুন..."
-              className="flex-1 h-10 rounded-lg bg-[#0A0A0B] border border-white/10 px-3 text-xs sm:text-sm text-[#E5E5E7] placeholder:text-white/35 focus:outline-none focus:border-emerald-500"
+              className="flex-1 h-10 rounded-xl forest-input px-3 text-xs sm:text-sm text-[#EDF4F0] placeholder:text-[#5D726A]"
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="h-10 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white flex items-center justify-center transition-colors"
+              className="h-10 px-3.5 rounded-xl forest-btn-primary disabled:opacity-40 flex items-center justify-center transition-all"
               aria-label="Send message"
             >
               <Send className="w-4 h-4" />
@@ -237,7 +243,7 @@ export default function DawahChatbot() {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="h-12 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl flex items-center gap-2 text-xs sm:text-sm font-medium transition-transform hover:-translate-y-0.5"
+          className="h-12 px-5 rounded-full forest-btn-primary flex items-center gap-2 text-xs sm:text-sm font-semibold transition-transform hover:-translate-y-0.5"
         >
           <MessageSquare className="w-4 h-4" />
           <span>দাওয়াহ AI সহায়ক</span>

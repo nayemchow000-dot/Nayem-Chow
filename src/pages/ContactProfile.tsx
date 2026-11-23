@@ -235,20 +235,20 @@ export default function ContactProfile() {
     fetchContact();
   };
 
-  if (loading) return <div className="p-8 text-center text-white/40">Loading profile...</div>;
+  if (loading) return <div className="p-8 text-center text-[#8EA39A]">Loading profile...</div>;
   if (error) {
     return (
-      <div className="p-8 max-w-md mx-auto mt-12 text-center border border-rose-500/20 rounded-2xl bg-rose-500/5">
-        <h3 className="text-lg font-medium text-rose-500 mb-2">Error Loading Profile</h3>
-        <p className="text-rose-500/80 text-sm mb-6">{error}</p>
-        <Link to="/contacts" className="text-emerald-500 hover:text-emerald-400 text-sm underline underline-offset-4">
+      <div className="p-8 max-w-md mx-auto mt-12 text-center border border-rose-400/35 rounded-[20px] glass-hot">
+        <h3 className="text-lg font-medium text-rose-300 mb-2">Error Loading Profile</h3>
+        <p className="text-rose-200/80 text-sm mb-6">{error}</p>
+        <Link to="/contacts" className="text-[#34D399] hover:text-[#B6F5D8] text-sm underline underline-offset-4">
           Return to Contacts
         </Link>
       </div>
     );
   }
   if (!contact || contact.id === undefined) {
-    return <div className="p-8 text-center text-white/40">Brother not found.</div>;
+    return <div className="p-8 text-center text-[#8EA39A]">Brother not found.</div>;
   }
 
   const catMap = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
@@ -281,26 +281,26 @@ export default function ContactProfile() {
             </Link>
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-serif italic tracking-tight text-[#E5E5E7] truncate">
+            <h1 className="text-2xl sm:text-3xl font-serif italic tracking-tight text-[#EDF4F0] truncate">
               {contact.name}
             </h1>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-white/50">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-[#8EA39A]">
               {contact.phone && (
                 <span className="flex items-center gap-1.5 font-mono tabular-nums">
-                  <Phone className="w-3.5 h-3.5" /> {contact.phone}
+                  <Phone className="w-3.5 h-3.5 text-[#34D399]" /> {contact.phone}
                 </span>
               )}
               {contact.area && (
                 <span className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5" /> {contact.area}
+                  <MapPin className="w-3.5 h-3.5 text-[#34D399]" /> {contact.area}
                 </span>
               )}
               <span className="flex items-center gap-1.5 tabular-nums">
-                <Calendar className="w-3.5 h-3.5" /> যুক্ত: {new Date(contact.firstContactDate).toLocaleDateString()}
+                <Calendar className="w-3.5 h-3.5 text-[#34D399]" /> যুক্ত: {new Date(contact.firstContactDate).toLocaleDateString()}
               </span>
             </div>
             {resolvedMemberCategories.length > 0 && (
-              <div className="text-xs text-emerald-400/90 mt-2">
+              <div className="text-xs text-[#B6F5D8] mt-2">
                 সক্রিয় ইনডিকেটর: {resolvedMemberCategories.join(' · ')}
               </div>
             )}
@@ -315,7 +315,7 @@ export default function ContactProfile() {
                 setReviewPendingEntry(null);
                 setVoiceModalOpen(true);
               }}
-              className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="gap-2"
             >
               <Mic className="w-4 h-4" />
               ভয়েস নোট (Voice Input)
@@ -336,15 +336,15 @@ export default function ContactProfile() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Full Name</label>
+                  <label className="text-xs text-[#8EA39A]">Full Name</label>
                   <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Phone Number</label>
+                  <label className="text-xs text-[#8EA39A]">Phone Number</label>
                   <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Area/Location</label>
+                  <label className="text-xs text-[#8EA39A]">Area/Location</label>
                   <Input value={editArea} onChange={(e) => setEditArea(e.target.value)} />
                 </div>
               </div>
@@ -414,20 +414,20 @@ export default function ContactProfile() {
             <div className="md:col-span-1 space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-xs uppercase tracking-widest text-white/60 font-semibold">
+                  <CardTitle className="text-xs uppercase tracking-widest text-[#8EA39A] font-semibold">
                     Performance
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <div className="text-[11px] text-white/45 mb-1">Overall Growth Score</div>
-                    <div className="text-3xl font-serif italic text-emerald-500 tabular-nums">
+                    <div className="text-[11px] text-[#8EA39A] mb-1">Overall Growth Score</div>
+                    <div className="text-3xl font-serif italic text-[#34D399] tabular-nums">
                       {contact.growthScore}%
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                    <span className="text-xs text-white/50">Weekly Change</span>
+                  <div className="pt-4 border-t border-white/[0.08] flex items-center justify-between">
+                    <span className="text-xs text-[#8EA39A]">Weekly Change</span>
                     <Badge
                       variant={
                         contact.weeklyChange > 0
@@ -442,8 +442,8 @@ export default function ContactProfile() {
                     </Badge>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                    <span className="text-xs text-white/50">Current Priority</span>
+                  <div className="pt-4 border-t border-white/[0.08] flex items-center justify-between">
+                    <span className="text-xs text-[#8EA39A]">Current Priority</span>
                     <Badge
                       variant={
                         contact.priorityLevel === 'growing'
@@ -459,9 +459,9 @@ export default function ContactProfile() {
                     </Badge>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5">
-                    <div className="text-xs text-white/50 mb-1">Current Stage</div>
-                    <div className="text-sm font-medium text-[#E5E5E7]">
+                  <div className="pt-4 border-t border-white/[0.08]">
+                    <div className="text-xs text-[#8EA39A] mb-1">Current Stage</div>
+                    <div className="text-sm font-medium text-[#EDF4F0]">
                       {contact.currentStage}/16 · {STAGES[(contact.currentStage || 1) - 1] || ''}
                     </div>
                   </div>
@@ -469,13 +469,13 @@ export default function ContactProfile() {
               </Card>
 
               <Card>
-                <CardHeader className="bg-white/[0.02] border-b border-white/5 pb-4">
-                  <CardTitle className="text-xs flex items-center gap-2 text-emerald-400 font-semibold">
+                <CardHeader className="bg-white/[0.025] border-b border-white/[0.08] pb-4">
+                  <CardTitle className="text-xs flex items-center gap-2 text-[#34D399] font-semibold">
                     <Activity className="w-4 h-4" /> দ্রুত দাওয়াহ গাইডেন্স
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-3">
-                  <p className="text-white/75 text-xs sm:text-sm leading-relaxed">
+                  <p className="text-[#EDF4F0]/80 text-xs sm:text-sm leading-relaxed">
                     {insights?.dawahGuidance?.practicalNextAction ||
                       (contact.priorityLevel === 'high_priority'
                         ? 'হিকমাহ ও আন্তরিকতার সাথে ব্যক্তিগত খোঁজখবর নিন; কোনো ধরনের চাপ প্রয়োগ করবেন না।'
@@ -502,7 +502,7 @@ export default function ContactProfile() {
               {/* Real Observations & Categories Card */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs uppercase tracking-widest text-white/60 font-semibold">
+                  <CardTitle className="text-xs uppercase tracking-widest text-[#8EA39A] font-semibold">
                     পর্যবেক্ষিত ইনডিকেটর ও সাম্প্রতিক নোট (Observations)
                   </CardTitle>
                   {isAdmin && (
@@ -513,31 +513,31 @@ export default function ContactProfile() {
                       onClick={() => setVoiceModalOpen(true)}
                       className="gap-1.5 text-xs"
                     >
-                      <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                      <Mic className="w-3.5 h-3.5 text-[#34D399]" />
                       ভয়েস নোট যোগ করুন
                     </Button>
                   )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {resolvedMemberCategories.length > 0 ? (
-                    <div className="p-3.5 rounded-lg bg-[#0A0A0B] border border-white/10">
-                      <div className="text-[11px] text-white/45 mb-1.5">যুক্ত ক্যাটাগরি সমূহ</div>
-                      <div className="text-sm text-emerald-400 leading-relaxed">
+                    <div className="p-4 rounded-2xl glass-2">
+                      <div className="text-[11px] text-[#8EA39A] mb-1.5">যুক্ত ক্যাটাগরি সমূহ</div>
+                      <div className="text-sm text-[#B6F5D8] leading-relaxed">
                         {resolvedMemberCategories.join(' · ')}
                       </div>
                     </div>
                   ) : (
-                    <div className="p-3.5 rounded-lg bg-[#0A0A0B] border border-white/10 text-xs text-white/50">
+                    <div className="p-4 rounded-2xl glass-2 text-xs text-[#8EA39A]">
                       এখনো কোনো ক্যাটাগরি যুক্ত করা হয়নি। ভয়েস নোট বা ক্যাটাগরি পেজ থেকে যুক্ত করতে পারেন।
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    <div className="text-xs text-white/50 font-medium">
+                    <div className="text-xs text-[#8EA39A] font-medium">
                       সাম্প্রতিক পর্যবেক্ষণ ({observationsList.length})
                     </div>
                     {observationsList.length === 0 ? (
-                      <p className="text-xs text-white/40 py-2">
+                      <p className="text-xs text-[#5D726A] py-2">
                         এখনো কোনো লিখিত বা ভয়েস পর্যবেক্ষণ রেকর্ড করা হয়নি।
                       </p>
                     ) : (
@@ -545,10 +545,10 @@ export default function ContactProfile() {
                         {observationsList.slice(0, 8).map((obs) => (
                           <div
                             key={obs.id}
-                            className="p-3 rounded-lg bg-[#0A0A0B] border border-white/5 flex items-start justify-between gap-3"
+                            className="p-3.5 rounded-2xl glass-2 flex items-start justify-between gap-3"
                           >
-                            <p className="text-xs text-white/80">{obs.observation}</p>
-                            <span className="text-[11px] font-mono text-white/40 shrink-0">{obs.date}</span>
+                            <p className="text-xs text-[#EDF4F0]/85">{obs.observation}</p>
+                            <span className="text-[11px] font-mono text-[#5D726A] shrink-0 tabular-nums">{obs.date}</span>
                           </div>
                         ))}
                       </div>
@@ -561,10 +561,10 @@ export default function ContactProfile() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-xs uppercase tracking-widest text-white/60 font-semibold flex items-center gap-2">
+                    <CardTitle className="text-xs uppercase tracking-widest text-[#8EA39A] font-semibold flex items-center gap-2">
                       <span>Follow-ups & Reminders</span>
                       {overdueCount > 0 && (
-                        <span className="text-[11px] font-normal text-rose-400 normal-case">
+                        <span className="text-[11px] font-normal text-rose-300 normal-case">
                           · {overdueCount}টি মেয়াদোত্তীর্ণ
                         </span>
                       )}
@@ -587,7 +587,7 @@ export default function ContactProfile() {
                         </DialogHeader>
                         <form onSubmit={handleCreateFollowUp} className="space-y-3 py-2">
                           <div className="space-y-1">
-                            <label className="text-xs text-white/60">আলোচনার বিষয় (Topic)</label>
+                            <label className="text-xs text-[#8EA39A]">আলোচনার বিষয় (Topic)</label>
                             <Input
                               value={fuTopic}
                               onChange={(e) => setFuTopic(e.target.value)}
@@ -596,7 +596,7 @@ export default function ContactProfile() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs text-white/60">সদস্যের সাড়া / নোট</label>
+                            <label className="text-xs text-[#8EA39A]">সদস্যের সাড়া / নোট</label>
                             <Input
                               value={fuResponse}
                               onChange={(e) => setFuResponse(e.target.value)}
@@ -605,7 +605,7 @@ export default function ContactProfile() {
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
-                              <label className="text-xs text-white/60">পরবর্তী যোগাযোগের তারিখ</label>
+                              <label className="text-xs text-[#8EA39A]">পরবর্তী যোগাযোগের তারিখ</label>
                               <Input
                                 type="date"
                                 value={fuNextDate}
@@ -613,7 +613,7 @@ export default function ContactProfile() {
                               />
                             </div>
                             <div className="space-y-1">
-                              <label className="text-xs text-white/60">দায়িত্বপ্রাপ্ত ব্যক্তি</label>
+                              <label className="text-xs text-[#8EA39A]">দায়িত্বপ্রাপ্ত ব্যক্তি</label>
                               <Input
                                 value={fuAssignedTo}
                                 onChange={(e) => setFuAssignedTo(e.target.value)}
@@ -622,7 +622,7 @@ export default function ContactProfile() {
                             </div>
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs text-white/60">রিমাইন্ডার নোট (Reminder Note)</label>
+                            <label className="text-xs text-[#8EA39A]">রিমাইন্ডার নোট (Reminder Note)</label>
                             <Input
                               value={fuReminderNote}
                               onChange={(e) => setFuReminderNote(e.target.value)}
@@ -648,7 +648,7 @@ export default function ContactProfile() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {followUpsList.length === 0 ? (
-                    <div className="text-xs text-white/45 py-4 text-center">
+                    <div className="text-xs text-[#8EA39A] py-4 text-center">
                       এখনো কোনো ফলো-আপ বা রিমাইন্ডার যুক্ত করা হয়নি।
                     </div>
                   ) : (
@@ -657,42 +657,42 @@ export default function ContactProfile() {
                       return (
                         <div
                           key={fu.id}
-                          className={`p-3.5 rounded-lg border flex flex-col sm:flex-row sm:items-start justify-between gap-3 ${
+                          className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-start justify-between gap-3 ${
                             fu.isCompleted
-                              ? 'bg-[#0A0A0B]/50 border-white/5 opacity-60'
+                              ? 'glass-2 opacity-60'
                               : isOverdue
-                              ? 'bg-rose-500/5 border-rose-500/30'
-                              : 'bg-[#0A0A0B] border-white/10'
+                              ? 'glass-hot border-rose-400/35'
+                              : 'glass-2'
                           }`}
                         >
                           <div className="space-y-1 min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2 text-xs">
-                              <span className="font-semibold text-[#E5E5E7]">
+                              <span className="font-semibold text-[#EDF4F0]">
                                 {fu.topic || 'ফলো-আপ নোট'}
                               </span>
-                              <span className="text-white/40 font-mono">· {fu.date}</span>
+                              <span className="text-[#5D726A] font-mono tabular-nums">· {fu.date}</span>
                               {isOverdue && (
-                                <span className="text-rose-400 font-medium flex items-center gap-1">
+                                <span className="text-rose-300 font-medium flex items-center gap-1">
                                   <Clock className="w-3 h-3" /> মেয়াদোত্তীর্ণ ({fu.nextActionDate})
                                 </span>
                               )}
                               {!isOverdue && fu.nextActionDate && !fu.isCompleted && (
-                                <span className="text-emerald-400 font-mono">
+                                <span className="text-[#34D399] font-mono tabular-nums">
                                   পরবর্তী: {fu.nextActionDate}
                                 </span>
                               )}
                               {fu.isCompleted && (
-                                <span className="text-emerald-400">সম্পন্ন</span>
+                                <span className="text-[#34D399]">সম্পন্ন</span>
                               )}
                             </div>
-                            {fu.response && <p className="text-xs text-white/70">{fu.response}</p>}
+                            {fu.response && <p className="text-xs text-[#EDF4F0]/75">{fu.response}</p>}
                             {(fu.reminderNote || fu.nextAction) && (
-                              <p className="text-xs text-amber-300/90">
+                              <p className="text-xs text-[#F4A85E]">
                                 রিমাইন্ডার: {fu.reminderNote || fu.nextAction}
                               </p>
                             )}
                             {fu.assignedTo && (
-                              <div className="text-[11px] text-white/45 flex items-center gap-1">
+                              <div className="text-[11px] text-[#8EA39A] flex items-center gap-1">
                                 <UserCheck className="w-3 h-3" /> দায়িত্বপ্রাপ্ত: {fu.assignedTo}
                               </div>
                             )}
@@ -715,7 +715,7 @@ export default function ContactProfile() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleDeleteFollowUp(fu.id)}
-                                className="h-8 w-8 p-0 text-rose-400/70 hover:text-rose-400"
+                                className="h-8 w-8 p-0 text-rose-300/75 hover:text-rose-300"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
@@ -735,11 +735,11 @@ export default function ContactProfile() {
         <TabsContent value="ai-guidance" className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-[#E5E5E7] flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-lg font-semibold text-[#EDF4F0] flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#34D399]" />
                 <span>AI গ্যাপ অ্যানালাইসিস ও ব্যক্তিগত দাওয়াহ গাইডেন্স</span>
               </h3>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-[#8EA39A] mt-0.5">
                 পর্যবেক্ষিত তথ্যের ভিত্তিতে সম্মানজনক ও ধাপে ধাপে অগ্রগতির পরামর্শ (তথ্য অনুপস্থিত থাকা মানে আমল না করা নয়)।
               </p>
             </div>
@@ -748,7 +748,7 @@ export default function ContactProfile() {
                 type="button"
                 onClick={handleRefreshInsights}
                 disabled={refreshingInsights}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shrink-0"
+                className="gap-2 shrink-0"
               >
                 {refreshingInsights ? (
                   <>
@@ -766,7 +766,7 @@ export default function ContactProfile() {
           </div>
 
           {insightsError && (
-            <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-400/35 text-rose-300 text-xs">
               {insightsError}
             </div>
           )}
@@ -774,11 +774,11 @@ export default function ContactProfile() {
           {!insights ? (
             <Card>
               <CardContent className="py-10 text-center space-y-3">
-                <p className="text-sm text-white/60">
+                <p className="text-sm text-[#8EA39A]">
                   এই সদস্যের জন্য এখনো AI গ্যাপ অ্যানালাইসিস ও দাওয়াহ গাইডেন্স তৈরি করা হয়নি।
                 </p>
                 {isAdmin && (
-                  <p className="text-xs text-white/45">
+                  <p className="text-xs text-[#5D726A]">
                     উপরের “AI বিশ্লেষণ তৈরি করুন” অথবা “ভয়েস নোট” বাটনে ক্লিক করে শুরু করুন।
                   </p>
                 )}
@@ -788,20 +788,20 @@ export default function ContactProfile() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Gap Analysis Card */}
               <Card>
-                <CardHeader className="border-b border-white/5 pb-4">
-                  <CardTitle className="text-sm font-semibold text-[#E5E5E7] flex items-center gap-2">
-                    <Compass className="w-4 h-4 text-emerald-400" />
+                <CardHeader className="border-b border-white/[0.08] pb-4">
+                  <CardTitle className="text-sm font-semibold text-[#EDF4F0] flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-[#34D399]" />
                     <span>AI গ্যাপ অ্যানালাইসিস (Gap Analysis)</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
                   <div>
-                    <h4 className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 mb-2">
+                    <h4 className="text-xs font-semibold text-[#34D399] flex items-center gap-1.5 mb-2">
                       <CheckCircle2 className="w-3.5 h-3.5" /> অর্জিত ও পর্যবেক্ষিত ইনডিকেটর
                     </h4>
-                    <ul className="space-y-1.5 text-xs text-white/80">
+                    <ul className="space-y-1.5 text-xs text-[#EDF4F0]/85">
                       {(insights.gapAnalysis?.achieved || []).map((item, i) => (
-                        <li key={i} className="p-2 rounded bg-[#0A0A0B] border border-white/5">
+                        <li key={i} className="p-2.5 rounded-xl glass-2">
                           • {item}
                         </li>
                       ))}
@@ -809,12 +809,12 @@ export default function ContactProfile() {
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-semibold text-amber-400 flex items-center gap-1.5 mb-2">
+                    <h4 className="text-xs font-semibold text-[#F4A85E] flex items-center gap-1.5 mb-2">
                       <AlertCircle className="w-3.5 h-3.5" /> যেসব ক্ষেত্রে আরো মনোযোগ দেওয়া যায়
                     </h4>
-                    <ul className="space-y-1.5 text-xs text-white/80">
+                    <ul className="space-y-1.5 text-xs text-[#EDF4F0]/85">
                       {(insights.gapAnalysis?.needsAttention || []).map((item, i) => (
-                        <li key={i} className="p-2 rounded bg-[#0A0A0B] border border-white/5">
+                        <li key={i} className="p-2.5 rounded-xl glass-2">
                           • {item}
                         </li>
                       ))}
@@ -822,12 +822,12 @@ export default function ContactProfile() {
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-semibold text-white/60 flex items-center gap-1.5 mb-2">
+                    <h4 className="text-xs font-semibold text-[#8EA39A] flex items-center gap-1.5 mb-2">
                       <HelpCircle className="w-3.5 h-3.5" /> যেসব তথ্য এখনো অজানা (অনুমান নয়)
                     </h4>
-                    <ul className="space-y-1.5 text-xs text-white/65">
+                    <ul className="space-y-1.5 text-xs text-[#8EA39A]">
                       {(insights.gapAnalysis?.unknownInfo || []).map((item, i) => (
-                        <li key={i} className="p-2 rounded bg-[#0A0A0B] border border-white/5">
+                        <li key={i} className="p-2.5 rounded-xl glass-2">
                           • {item}
                         </li>
                       ))}
@@ -835,10 +835,10 @@ export default function ContactProfile() {
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-semibold text-teal-400 mb-2">প্রস্তাবিত পরবর্তী পদক্ষেপ</h4>
-                    <ul className="space-y-1.5 text-xs text-white/80">
+                    <h4 className="text-xs font-semibold text-[#B6F5D8] mb-2">প্রস্তাবিত পরবর্তী পদক্ষেপ</h4>
+                    <ul className="space-y-1.5 text-xs text-[#EDF4F0]/85">
                       {(insights.gapAnalysis?.nextSteps || []).map((item, i) => (
-                        <li key={i} className="p-2 rounded bg-[#0A0A0B] border border-white/5">
+                        <li key={i} className="p-2.5 rounded-xl glass-2">
                           • {item}
                         </li>
                       ))}
@@ -849,53 +849,53 @@ export default function ContactProfile() {
 
               {/* Personalized Dawah Guidance Card */}
               <Card>
-                <CardHeader className="border-b border-white/5 pb-4">
-                  <CardTitle className="text-sm font-semibold text-[#E5E5E7] flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                <CardHeader className="border-b border-white/[0.08] pb-4">
+                  <CardTitle className="text-sm font-semibold text-[#EDF4F0] flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#34D399]" />
                     <span>ব্যক্তিগত দাওয়াহ গাইডেন্স (Personalized Guidance)</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4 text-xs">
-                  <div className="p-3 rounded-lg bg-[#0A0A0B] border border-white/10">
-                    <div className="text-white/45 mb-1">দাওয়াহর উপযুক্ত পরবর্তী ধাপ</div>
-                    <div className="text-sm font-medium text-emerald-400">
+                  <div className="p-3.5 rounded-2xl glass-2">
+                    <div className="text-[#8EA39A] mb-1">দাওয়াহর উপযুক্ত পরবর্তী ধাপ</div>
+                    <div className="text-sm font-medium text-[#34D399]">
                       {insights.dawahGuidance?.nextStage}
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-[#0A0A0B] border border-white/10">
-                    <div className="text-white/45 mb-1">আলোচনার উপযুক্ত বিষয়</div>
-                    <div className="text-white/85 leading-relaxed">
+                  <div className="p-3.5 rounded-2xl glass-2">
+                    <div className="text-[#8EA39A] mb-1">আলোচনার উপযুক্ত বিষয়</div>
+                    <div className="text-[#EDF4F0]/85 leading-relaxed">
                       {insights.dawahGuidance?.topicToDiscuss}
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-[#0A0A0B] border border-white/10">
-                    <div className="text-white/45 mb-1">সম্মানজনক পরামর্শ ও দাওয়াত</div>
-                    <div className="text-white/85 leading-relaxed">
+                  <div className="p-3.5 rounded-2xl glass-2">
+                    <div className="text-[#8EA39A] mb-1">সম্মানজনক পরামর্শ ও দাওয়াত</div>
+                    <div className="text-[#EDF4F0]/85 leading-relaxed">
                       {insights.dawahGuidance?.adviceOrInvitation}
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-[#0A0A0B] border border-white/10">
-                    <div className="text-white/45 mb-1">পরবর্তীতে উৎসাহিত করার মতো কার্যক্রম</div>
-                    <div className="text-white/85 leading-relaxed">
+                  <div className="p-3.5 rounded-2xl glass-2">
+                    <div className="text-[#8EA39A] mb-1">পরবর্তীতে উৎসাহিত করার মতো কার্যক্রম</div>
+                    <div className="text-[#EDF4F0]/85 leading-relaxed">
                       {insights.dawahGuidance?.activityToEncourage}
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-[#0A0A0B] border border-white/10 space-y-1.5">
-                    <div className="text-white/45">ফলো-আপে জিজ্ঞাসার জন্য সৌজন্যমূলক প্রশ্ন</div>
+                  <div className="p-3.5 rounded-2xl glass-2 space-y-1.5">
+                    <div className="text-[#8EA39A]">ফলো-আপে জিজ্ঞাসার জন্য সৌজন্যমূলক প্রশ্ন</div>
                     {(insights.dawahGuidance?.followUpQuestions || []).map((q, i) => (
-                      <div key={i} className="text-white/80">
+                      <div key={i} className="text-[#EDF4F0]/85">
                         • {q}
                       </div>
                     ))}
                   </div>
 
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/25">
-                    <div className="text-emerald-400 font-semibold mb-1">বাস্তবসম্মত পরবর্তী করণীয়</div>
-                    <div className="text-[#E5E5E7] leading-relaxed">
+                  <div className="p-3.5 rounded-2xl bg-[#34D399]/12 border border-[#34D399]/30">
+                    <div className="text-[#34D399] font-semibold mb-1">বাস্তবসম্মত পরবর্তী করণীয়</div>
+                    <div className="text-[#EDF4F0] leading-relaxed">
                       {insights.dawahGuidance?.practicalNextAction}
                     </div>
                   </div>
@@ -907,14 +907,14 @@ export default function ContactProfile() {
 
         {/* GROWTH JOURNEY TAB */}
         <TabsContent value="journey" className="space-y-6">
-          <Card className="overflow-hidden border-emerald-500/20 bg-[#16161A] shadow-xl relative">
+          <Card className="overflow-hidden border-[#34D399]/25 relative">
             <CardContent className="p-6 sm:p-8 relative z-10">
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h4 className="text-xs font-bold text-emerald-500/80 uppercase tracking-widest">
+                  <h4 className="text-xs font-bold text-[#34D399] uppercase tracking-widest">
                     The 16 Stages of Growth
                   </h4>
-                  <p className="text-sm text-white/40 mt-1">Track spiritual and organizational progression.</p>
+                  <p className="text-sm text-[#8EA39A] mt-1">Track spiritual and organizational progression.</p>
                 </div>
                 {isAdmin && (
                   <Dialog>
@@ -930,7 +930,7 @@ export default function ContactProfile() {
                       </DialogHeader>
                       <div className="py-4">
                         <select
-                          className="w-full h-10 rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm text-[#E5E5E7] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="w-full h-10 rounded-xl forest-input px-3 py-2 text-sm"
                           value={contact.currentStage}
                           onChange={async (e) => {
                             const newStage = Number(e.target.value);
@@ -943,7 +943,7 @@ export default function ContactProfile() {
                           }}
                         >
                           {STAGES.map((s, i) => (
-                            <option key={i} value={i + 1}>
+                            <option key={i} value={i + 1} className="bg-[#0A1210]">
                               {i + 1}. {s}
                             </option>
                           ))}
@@ -960,7 +960,7 @@ export default function ContactProfile() {
               </div>
 
               <div className="relative">
-                <div className="absolute left-8 top-0 bottom-0 w-px bg-white/5" />
+                <div className="absolute left-8 top-0 bottom-0 w-px bg-white/10" />
                 <div className="space-y-6">
                   {STAGES.map((stageName, idx) => {
                     const step = idx + 1;
@@ -968,28 +968,28 @@ export default function ContactProfile() {
                     const isCurrent = step === contact.currentStage;
 
                     return (
-                      <div key={idx} className={`relative flex items-center gap-6 ${isCompleted ? 'opacity-50' : ''}`}>
+                      <div key={idx} className={`relative flex items-center gap-6 ${isCompleted ? 'opacity-55' : ''}`}>
                         <div
                           className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-lg font-serif italic border-2 transition-colors z-10 tabular-nums ${
                             isCompleted
-                              ? 'bg-[#0A0A0B] border-emerald-500/50 text-emerald-500'
+                              ? 'bg-[#08120E] border-[#34D399]/50 text-[#34D399]'
                               : isCurrent
-                              ? 'bg-[#0A0A0B] border-emerald-400 text-emerald-400 ring-4 ring-emerald-500/10'
-                              : 'bg-[#0A0A0B] border-white/10 text-white/20'
+                              ? 'bg-[#08120E] border-[#34D399] text-[#B6F5D8] ring-4 ring-[#34D399]/15'
+                              : 'bg-[#08120E] border-white/12 text-[#5D726A]'
                           }`}
                         >
                           {step}
                         </div>
                         <div
-                          className={`flex-1 p-4 rounded-xl border transition-colors ${
-                            isCurrent ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-white/[0.02] border-white/5'
+                          className={`flex-1 p-4 rounded-2xl border transition-colors ${
+                            isCurrent ? 'bg-[#34D399]/10 border-[#34D399]/30' : 'glass-2'
                           }`}
                         >
-                          <h5 className={`font-semibold ${isCurrent ? 'text-emerald-400' : 'text-[#E5E5E7]'}`}>
+                          <h5 className={`font-semibold ${isCurrent ? 'text-[#B6F5D8]' : 'text-[#EDF4F0]'}`}>
                             {stageName}
                           </h5>
                           {isCurrent && (
-                            <p className="text-xs text-white/60 mt-2">
+                            <p className="text-xs text-[#8EA39A] mt-2">
                               বর্তমানে এই ধাপটি সুদৃঢ় করার ওপর গুরুত্ব দেওয়া হচ্ছে।
                             </p>
                           )}
@@ -1008,10 +1008,10 @@ export default function ContactProfile() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-xs uppercase tracking-widest text-white/60 font-semibold">
+                <CardTitle className="text-xs uppercase tracking-widest text-[#8EA39A] font-semibold">
                   Weekly Salah Log
                 </CardTitle>
-                <p className="text-white/40 text-xs mt-1">Track 5 daily prayers (Jama'ah, Alone, Missed)</p>
+                <p className="text-[#8EA39A] text-xs mt-1">Track 5 daily prayers (Jama'ah, Alone, Missed)</p>
               </div>
               <Dialog>
                 <DialogTrigger asChild>
@@ -1033,15 +1033,15 @@ export default function ContactProfile() {
                       ['Isha', logIsha, setLogIsha],
                     ].map(([name, val, setVal]: any) => (
                       <div key={name} className="flex items-center justify-between">
-                        <label className="text-sm text-[#E5E5E7] font-medium w-24">{name}</label>
+                        <label className="text-sm text-[#EDF4F0] font-medium w-24">{name}</label>
                         <select
-                          className="flex-1 h-10 rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm text-[#E5E5E7] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="flex-1 h-10 rounded-xl forest-input px-3 py-2 text-sm"
                           value={val}
                           onChange={(e) => setVal(e.target.value)}
                         >
-                          <option value="jamaah">Jama'ah (Mosque)</option>
-                          <option value="alone">Prayed Alone</option>
-                          <option value="missed">Missed</option>
+                          <option value="jamaah" className="bg-[#0A1210]">Jama'ah (Mosque)</option>
+                          <option value="alone" className="bg-[#0A1210]">Prayed Alone</option>
+                          <option value="missed" className="bg-[#0A1210]">Missed</option>
                         </select>
                       </div>
                     ))}
@@ -1060,7 +1060,7 @@ export default function ContactProfile() {
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left border-collapse">
-                  <thead className="bg-white/[0.03] text-white/40 text-[11px] uppercase tracking-wider">
+                  <thead className="bg-white/[0.03] text-[#8EA39A] text-[11px] uppercase tracking-wider">
                     <tr>
                       <th className="p-4 font-medium w-32">Waqt</th>
                       {past7DaysData.map((day) => (
@@ -1070,10 +1070,10 @@ export default function ContactProfile() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-white/[0.06]">
                     {['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].map((waqt) => (
-                      <tr key={waqt} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-4 font-medium text-white/60">{waqt}</td>
+                      <tr key={waqt} className="hover:bg-white/[0.03] transition-colors">
+                        <td className="p-4 font-medium text-[#8EA39A]">{waqt}</td>
                         {past7DaysData.map((day) => {
                           const log = salahLogs.find((l) => l.date === day.dateStr);
                           const waqtKey = waqt.toLowerCase();
@@ -1085,15 +1085,15 @@ export default function ContactProfile() {
                                   <div
                                     className={`w-3 h-3 rounded-full ${
                                       status === 'jamaah' || status === true
-                                        ? 'bg-emerald-500'
+                                        ? 'bg-[#34D399]'
                                         : status === 'alone'
-                                        ? 'bg-amber-500'
-                                        : 'bg-rose-500'
+                                        ? 'bg-[#F4A85E]'
+                                        : 'bg-rose-400'
                                     }`}
                                     title={String(status)}
                                   />
                                 ) : (
-                                  <div className="w-3 h-3 rounded-full bg-white/5" title="No Data" />
+                                  <div className="w-3 h-3 rounded-full bg-white/10" title="No Data" />
                                 )}
                               </div>
                             </td>
@@ -1104,15 +1104,15 @@ export default function ContactProfile() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex items-center gap-6 mt-6 p-4 bg-white/5 rounded-lg text-xs text-white/60 justify-center">
+              <div className="flex items-center gap-6 mt-6 p-4 glass-2 rounded-2xl text-xs text-[#8EA39A] justify-center">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" /> Jama'ah (Mosque)
+                  <div className="w-2 h-2 rounded-full bg-[#34D399]" /> Jama'ah (Mosque)
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" /> Prayed Alone
+                  <div className="w-2 h-2 rounded-full bg-[#F4A85E]" /> Prayed Alone
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-rose-500" /> Missed
+                  <div className="w-2 h-2 rounded-full bg-rose-400" /> Missed
                 </div>
               </div>
             </CardContent>
@@ -1123,31 +1123,31 @@ export default function ContactProfile() {
         {isAdmin && (
           <TabsContent value="audit" className="space-y-4">
             <Card>
-              <CardHeader className="border-b border-white/5 pb-4">
-                <CardTitle className="text-sm font-semibold text-[#E5E5E7] flex items-center gap-2">
-                  <History className="w-4 h-4 text-emerald-400" />
+              <CardHeader className="border-b border-white/[0.08] pb-4">
+                <CardTitle className="text-sm font-semibold text-[#EDF4F0] flex items-center gap-2">
+                  <History className="w-4 h-4 text-[#34D399]" />
                   <span>ভয়েস ইনপুট ও অনুমোদন অডিট ইতিহাস (Audit History)</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-3">
                 {voiceHistory.length === 0 ? (
-                  <p className="text-xs text-white/45 py-6 text-center">
+                  <p className="text-xs text-[#8EA39A] py-6 text-center">
                     এই সদস্যের জন্য এখনো কোনো ভয়েস নোট রেকর্ড করা হয়নি।
                   </p>
                 ) : (
                   voiceHistory.map((entry) => (
                     <div
                       key={entry.id}
-                      className="p-4 rounded-lg bg-[#0A0A0B] border border-white/10 space-y-2"
+                      className={`p-4 rounded-2xl space-y-2 ${entry.status === 'pending' ? 'glass-hot' : 'glass-2'}`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span
                           className={`font-semibold ${
                             entry.status === 'approved'
-                              ? 'text-emerald-400'
+                              ? 'text-[#34D399]'
                               : entry.status === 'pending'
-                              ? 'text-amber-400'
-                              : 'text-white/45'
+                              ? 'text-[#F4A85E]'
+                              : 'text-[#8EA39A]'
                           }`}
                         >
                           {entry.status === 'approved'
@@ -1156,16 +1156,16 @@ export default function ContactProfile() {
                             ? 'অপেক্ষমাণ (Pending Review)'
                             : 'বাতিল (Cancelled)'}
                         </span>
-                        <span className="text-white/45 font-mono">
+                        <span className="text-[#8EA39A] font-mono tabular-nums">
                           অ্যাডমিন: {entry.adminUsername || 'admin'} ·{' '}
                           {new Date(entry.createdAt).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-xs text-white/80">“{entry.editedTranscription}”</p>
+                      <p className="text-xs text-[#EDF4F0]/85">“{entry.editedTranscription}”</p>
                       {entry.status === 'approved' &&
                         Array.isArray((entry.approvedChanges as any)?.addedCategories) &&
                         (entry.approvedChanges as any).addedCategories.length > 0 && (
-                          <div className="text-[11px] text-emerald-400/90">
+                          <div className="text-[11px] text-[#34D399]">
                             অনুমোদিত ক্যাটাগরি: {(entry.approvedChanges as any).addedCategories.join(' · ')}
                           </div>
                         )}
@@ -1177,7 +1177,7 @@ export default function ContactProfile() {
                             setReviewPendingEntry(entry);
                             setVoiceModalOpen(true);
                           }}
-                          className="bg-amber-600 hover:bg-amber-500 text-white text-xs"
+                          className="bg-gradient-to-r from-[#F4A85E] to-[#E8CD92] text-[#1A0D02] font-semibold hover:brightness-105 text-xs"
                         >
                           রিভিউ ও অনুমোদন করুন
                         </Button>

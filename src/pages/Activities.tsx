@@ -173,8 +173,9 @@ export default function Activities() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-serif italic tracking-tight text-white">Regular Dawah Activity</h1>
-          <p className="text-white/60 text-sm mt-1">Manage My Dawah Priority and log daily Dawah efforts.</p>
+          <div className="eyebrow text-[#34D399] mb-1">FIELD & CIRCLE EFFORTS</div>
+          <h1 className="text-3xl font-serif italic tracking-tight text-[#EDF4F0]">Regular Dawah Activity</h1>
+          <p className="text-[#8EA39A] text-sm mt-1">Manage My Dawah Priority and log daily Dawah efforts.</p>
         </div>
       </div>
 
@@ -185,35 +186,34 @@ export default function Activities() {
         </TabsList>
 
         <TabsContent value="sectors" className="mt-0">
-          
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {BENGALI_STAGES.map((stage, idx) => {
               const stageMembers = allContacts.filter(c => c.currentStage === idx + 1);
               const Icon = stage.icon;
               return (
-                <Card key={idx} className="flex flex-col h-full bg-[#121214]/80 backdrop-blur-md border-white/5 hover:border-emerald-500/20 transition-colors">
-                  <CardHeader className="flex flex-row items-center gap-3 border-b border-white/5 pb-4 px-4 pt-4">
-                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
+                <Card key={idx} className="flex flex-col h-full hover:border-[#34D399]/35 transition-all">
+                  <CardHeader className="flex flex-row items-center gap-3 border-b border-white/10 pb-4 px-4 pt-4">
+                    <div className="p-2.5 rounded-xl bg-[#34D399]/14 border border-[#34D399]/30 text-[#34D399]">
                       <Icon className="w-5 h-5" />
                     </div>
                     <div>
-                      <CardTitle className="text-sm font-bold text-[#E5E5E7]">{stage.title}</CardTitle>
-                      <p className="text-[11px] text-white/50 font-mono mt-0.5">{stageMembers.length} জন সদস্য</p>
+                      <CardTitle className="text-sm font-bold text-[#EDF4F0]">{stage.title}</CardTitle>
+                      <p className="text-[11px] text-[#8EA39A] font-mono tabular-nums mt-0.5">{stageMembers.length} জন সদস্য</p>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 p-0 flex flex-col">
                     <div className="flex-1 p-2 space-y-1 max-h-[250px] overflow-y-auto custom-scrollbar">
                       {stageMembers.length === 0 ? (
-                        <p className="text-center text-white/30 text-xs py-6">কোনো সদস্য নেই</p>
+                        <p className="text-center text-[#5D726A] text-xs py-6">কোনো সদস্য নেই</p>
                       ) : (
                         stageMembers.map(member => (
-                          <div 
+                          <div
                             key={member.id}
                             onClick={() => navigate('/contacts/' + member.id)}
-                            className="flex items-center gap-2 p-2 rounded-md hover:bg-white/5 cursor-pointer transition-colors group"
+                            className="flex items-center gap-2 p-2 rounded-xl hover:bg-white/[0.06] cursor-pointer transition-colors group"
                           >
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 group-hover:bg-emerald-400" />
-                            <span className="text-xs text-white/70 group-hover:text-emerald-400 transition-colors">{member.name}</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#34D399]/60 group-hover:bg-[#34D399]" />
+                            <span className="text-xs text-[#EDF4F0]/80 group-hover:text-[#B6F5D8] transition-colors">{member.name}</span>
                           </div>
                         ))
                       )}
@@ -241,28 +241,28 @@ export default function Activities() {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Activity Type</label>
-                    <select 
-                      className="w-full h-10 rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm text-[#E5E5E7] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    <label className="text-xs text-[#8EA39A]">Activity Type</label>
+                    <select
+                      className="w-full h-10 rounded-xl forest-input px-3 py-2 text-sm text-[#EDF4F0]"
                       value={activityType}
                       onChange={(e) => setActivityType(e.target.value)}
                     >
-                      <option value="Mosque Visit">Mosque Visit</option>
-                      <option value="Tea Table Dawah">Tea Table Dawah</option>
-                      <option value="Halaka">Halaka / Study Circle</option>
-                      <option value="Individual Meeting">Individual Meeting</option>
-                      <option value="Literature Distribution">Literature Distribution</option>
-                      <option value="Other">Other</option>
+                      <option value="Mosque Visit" className="bg-[#0A1210]">Mosque Visit</option>
+                      <option value="Tea Table Dawah" className="bg-[#0A1210]">Tea Table Dawah</option>
+                      <option value="Halaka" className="bg-[#0A1210]">Halaka / Study Circle</option>
+                      <option value="Individual Meeting" className="bg-[#0A1210]">Individual Meeting</option>
+                      <option value="Literature Distribution" className="bg-[#0A1210]">Literature Distribution</option>
+                      <option value="Other" className="bg-[#0A1210]">Other</option>
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Date</label>
+                    <label className="text-xs text-[#8EA39A]">Date</label>
                     <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Notes / Outcomes</label>
-                    <textarea 
-                      className="flex w-full rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm ring-offset-[#0A0A0B] placeholder:text-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 text-[#E5E5E7] min-h-[100px]"
+                    <label className="text-xs text-[#8EA39A]">Notes / Outcomes</label>
+                    <textarea
+                      className="flex w-full rounded-xl forest-input px-3 py-2 text-sm placeholder:text-[#5D726A] text-[#EDF4F0] min-h-[100px]"
                       placeholder="Summarize the discussion or outcome..."
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
@@ -281,59 +281,59 @@ export default function Activities() {
             </Dialog>
           </div>
 
-          <Card>
+          <Card className="overflow-hidden">
             <CardContent className="p-0">
-              <div className="p-4 border-b border-white/5 bg-white/[0.02] rounded-t-xl">
+              <div className="p-4 border-b border-white/10 bg-white/[0.025]">
                 <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-                  <Input 
-                    className="pl-9 bg-[#0A0A0B] border-white/10" 
-                    placeholder="Search activities or notes..." 
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8EA39A]" />
+                  <Input
+                    className="pl-10"
+                    placeholder="Search activities or notes..."
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                   />
                 </div>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
-                  <thead className="bg-white/[0.03] text-white/40 text-[10px] uppercase tracking-wider">
+                  <thead className="bg-white/[0.04] border-b border-white/10 text-[#8EA39A] text-[10px] font-mono uppercase tracking-wider">
                     <tr>
                       <th className="px-6 py-4 font-medium w-40">Date</th>
                       <th className="px-6 py-4 font-medium w-64">Activity Type</th>
                       <th className="px-6 py-4 font-medium">Notes & Outcomes</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-white/10">
                     {loading ? (
                       <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-white/40">Loading...</td>
+                        <td colSpan={3} className="px-6 py-8 text-center text-[#8EA39A]">Loading...</td>
                       </tr>
                     ) : error ? (
                       <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-rose-500 bg-rose-500/5">{error}</td>
+                        <td colSpan={3} className="px-6 py-8 text-center text-rose-300 bg-rose-500/10">{error}</td>
                       </tr>
                     ) : filteredActs.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-white/40">No activities found.</td>
+                        <td colSpan={3} className="px-6 py-8 text-center text-[#8EA39A]">No activities found.</td>
                       </tr>
                     ) : (
                       filteredActs.map((activity, idx) => (
-                        <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
+                        <tr key={idx} className="hover:bg-white/[0.04] transition-colors group">
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2 text-white/60">
-                              <Calendar className="w-4 h-4" />
+                            <div className="flex items-center gap-2 text-[#8EA39A] font-mono tabular-nums">
+                              <Calendar className="w-4 h-4 text-[#34D399]" />
                               <span>{new Date(activity.date).toLocaleDateString()}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <Badge variant="outline" className="border-emerald-500/20 text-emerald-400 bg-emerald-500/5">
+                            <Badge variant="success">
                               {activity.activityType}
                             </Badge>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-white/60 truncate max-w-lg" title={activity.notes}>
-                              {activity.notes || <span className="italic opacity-50">No notes provided</span>}
+                            <p className="text-[#EDF4F0]/80 truncate max-w-lg" title={activity.notes}>
+                              {activity.notes || <span className="italic text-[#5D726A]">No notes provided</span>}
                             </p>
                           </td>
                         </tr>

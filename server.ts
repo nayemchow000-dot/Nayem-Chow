@@ -6,13 +6,22 @@ import { apiRouter } from './src/api';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Mount API Routes
   app.use('/api', apiRouter);
+
+  // Never let unmatched /api requests fall through to HTML SPA fallback
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
+  });
+  app.use('/api', (err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[API Unhandled Error]', err);
+    res.status(err?.status || 500).json({ error: err?.message || 'Internal server error' });
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
@@ -25,6 +34,9 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*all', (req, res) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

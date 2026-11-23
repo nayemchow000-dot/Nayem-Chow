@@ -5,23 +5,23 @@ import * as Slot from '@radix-ui/react-slot';
 export const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean, variant?: 'default'|'outline'|'ghost'|'destructive', size?: 'default'|'sm'|'lg'|'icon' }>(({ className, variant = 'default', size = 'default', asChild = false, ...props }, ref) => {
   const Comp = asChild ? Slot.Slot : 'button';
   const variants = {
-    default: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm',
-    outline: 'border border-white/10 bg-white/5 hover:bg-white/10 text-[#E5E5E7]',
-    ghost: 'hover:bg-white/5 hover:text-[#E5E5E7] text-white/60',
-    destructive: 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm'
+    default: 'forest-btn-primary transition-all',
+    outline: 'border border-white/15 bg-white/[0.045] hover:bg-white/[0.09] hover:border-white/25 text-[#EDF4F0] backdrop-blur-md transition-all',
+    ghost: 'hover:bg-white/[0.06] hover:text-[#EDF4F0] text-[#8EA39A] transition-colors',
+    destructive: 'border border-rose-400/35 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 hover:border-rose-400/50 transition-all'
   };
   const sizes = {
-    default: 'h-10 px-4 py-2',
-    sm: 'h-9 rounded-md px-3',
-    lg: 'h-11 rounded-md px-8',
-    icon: 'h-10 w-10'
+    default: 'h-10 px-4 py-2 rounded-xl',
+    sm: 'h-9 rounded-xl px-3',
+    lg: 'h-11 rounded-xl px-8',
+    icon: 'h-10 w-10 rounded-xl'
   };
-  return <Comp ref={ref} className={cn('inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50', variants[variant], sizes[size], className)} {...props} />
+  return <Comp ref={ref} className={cn('inline-flex items-center justify-center whitespace-nowrap text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#34D399]/60 disabled:pointer-events-none disabled:opacity-50', variants[variant], sizes[size], className)} {...props} />
 });
 Button.displayName = 'Button';
 
 export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("rounded-xl border border-white/5 bg-[#16161A] text-[#E5E5E7] shadow-xl", className)} {...props} />
+  <div ref={ref} className={cn("glass rounded-[20px] text-[#EDF4F0]", className)} {...props} />
 ))
 Card.displayName = "Card"
 
@@ -31,7 +31,7 @@ export const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
 CardHeader.displayName = "CardHeader"
 
 export const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (
-  <h3 ref={ref} className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />
+  <h3 ref={ref} className={cn("text-lg font-semibold leading-snug tracking-tight text-[#EDF4F0]", className)} {...props} />
 ))
 CardTitle.displayName = "CardTitle"
 
@@ -42,14 +42,14 @@ CardContent.displayName = "CardContent"
 
 export const Badge = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { variant?: 'default'|'secondary'|'destructive'|'outline'|'success'|'warning' }>(({ className, variant = 'default', ...props }, ref) => {
   const variants = {
-    default: "border-transparent bg-white/10 text-[#E5E5E7] hover:bg-white/20",
-    secondary: "border-transparent bg-white/5 text-white/60 hover:bg-white/10",
-    destructive: "border-transparent bg-rose-500/20 text-rose-500 hover:bg-rose-500/30",
-    outline: "text-[#E5E5E7]",
-    success: "border-transparent bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30",
-    warning: "border-transparent bg-amber-500/20 text-amber-500 hover:bg-amber-500/30",
+    default: "border-white/15 bg-white/[0.08] text-[#EDF4F0]",
+    secondary: "border-white/12 bg-white/[0.05] text-[#8EA39A]",
+    destructive: "border-rose-400/35 bg-rose-500/15 text-rose-300",
+    outline: "border-white/15 bg-transparent text-[#EDF4F0]",
+    success: "border-emerald-400/35 bg-[#34D399]/15 text-[#B6F5D8]",
+    warning: "border-[#F4A85E]/40 bg-[#F4A85E]/15 text-[#F4A85E]",
   };
-  return <div ref={ref} className={cn("inline-flex items-center rounded border border-white/10 px-2 py-1 text-[10px] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[#0A0A0B]", variants[variant], className)} {...props} />
+  return <div ref={ref} className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors", variants[variant], className)} {...props} />
 })
 Badge.displayName = "Badge"
 
@@ -64,7 +64,7 @@ export const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-white/5 p-1 text-white/60",
+      "inline-flex min-h-11 items-center justify-center rounded-2xl glass-2 p-1 text-[#8EA39A]",
       className
     )}
     {...props}
@@ -79,7 +79,7 @@ export const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-[#0A0A0B] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-[#16161A] data-[state=active]:text-[#E5E5E7] data-[state=active]:shadow-sm",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-xl px-3.5 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#34D399]/60 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-emerald-400/15 data-[state=active]:text-[#B6F5D8] data-[state=active]:border data-[state=active]:border-emerald-400/30 data-[state=active]:shadow-sm",
       className
     )}
     {...props}
@@ -94,7 +94,7 @@ export const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-[#0A0A0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+      "mt-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#34D399]/60",
       className
     )}
     {...props}
@@ -117,7 +117,7 @@ export const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -134,13 +134,13 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-white/10 bg-[#16161A] p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 glass-modal rounded-[22px] p-6 text-[#EDF4F0] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-[#16161A] transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-white/10 data-[state=open]:text-white/40">
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-xl p-1.5 text-[#8EA39A] transition-colors hover:text-[#EDF4F0] hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#34D399]/60">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -170,7 +170,7 @@ export const DialogTitle = React.forwardRef<
   <DialogPrimitive.Title
     ref={ref}
     className={cn(
-      "text-lg font-semibold leading-none tracking-tight text-[#E5E5E7]",
+      "text-lg font-semibold leading-snug tracking-tight text-[#EDF4F0]",
       className
     )}
     {...props}
@@ -184,7 +184,7 @@ export const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-white/60", className)}
+    className={cn("text-sm text-[#8EA39A]", className)}
     {...props}
   />
 ))
@@ -192,7 +192,7 @@ DialogDescription.displayName = DialogPrimitive.Description.displayName
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(({ className, type, ...props }, ref) => {
   return (
-    <input type={type} className={cn("flex h-10 w-full rounded-md border border-white/10 bg-[#0A0A0B] px-3 py-2 text-sm ring-offset-[#0A0A0B] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 text-[#E5E5E7]", className)} ref={ref} {...props} />
+    <input type={type} className={cn("flex h-10 w-full rounded-xl forest-input px-3 py-2 text-sm placeholder:text-[#5D726A] disabled:cursor-not-allowed disabled:opacity-50", className)} ref={ref} {...props} />
   )
 })
 Input.displayName = "Input"
