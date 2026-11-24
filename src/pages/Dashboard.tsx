@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui';
 import { Contact, STAGES } from '../types';
-import { ArrowRight, Flame, Target, UserPlus, MessageCircle, ThumbsUp, PhoneCall, ArrowUpCircle, Home, Users, Sunrise, BookOpen, Library, Link as LinkIcon, Flag, TrendingUp, TrendingDown, Minus, Edit2, Heart, Megaphone, Star, Sparkles } from 'lucide-react';
+import { ArrowRight, Flame, Target, UserPlus, MessageCircle, ThumbsUp, PhoneCall, ArrowUpCircle, Home, Users, Sunrise, BookOpen, Library, Link as LinkIcon, Flag, TrendingUp, TrendingDown, Minus, Edit2, Heart, Megaphone, Star, Sparkles, Bell, Eye } from 'lucide-react';
 import { Link } from 'react-router';
 import { motion } from 'motion/react';
 import { useBranding } from '../contexts/BrandingContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCareRadar } from '../contexts/CareRadarContext';
 import { apiFetch } from '../lib/api';
 
   const BENGALI_STAGES = [
@@ -33,7 +34,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [selectedStageIdx, setSelectedStageIdx] = useState<number | null>(null);
   const { branding } = useBranding();
-  const { user } = useAuth();
+  const { user, isCoordinator } = useAuth();
+  const { enabled: careEnabled, stats: careStats, tasks: careTasks, openDrawer } = useCareRadar();
 
   const fetchContacts = async () => {
     try {
@@ -255,6 +257,69 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Care Radar & Monitoring Summary Bar */}
+        {isCoordinator && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {careEnabled && (
+              <div className="lg:col-span-8 glass rounded-[22px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="eyebrow text-[#34D399] flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5" />
+                    CARE RADAR · আজকের কেয়ার ও ফলো-আপ
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
+                    <span className="px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-400/35 text-rose-200 font-mono tabular-nums">
+                      জরুরি: {careStats.urgent}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-[#F4A85E]/15 border border-[#F4A85E]/35 text-[#F4A85E] font-mono tabular-nums">
+                      শীঘ্রই: {careStats.soon}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-[#34D399]/15 border border-[#34D399]/35 text-[#B6F5D8] font-mono tabular-nums">
+                      স্বাভাবিক: {careStats.ok}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {careTasks.slice(0, 2).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => openDrawer(t.contactId)}
+                      className="px-3 py-1.5 rounded-xl glass-2 hover:border-[#34D399]/40 text-xs text-[#EDF4F0] flex items-center gap-1.5"
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          t.urgency === 'urgent' ? 'bg-rose-400' : t.urgency === 'soon' ? 'bg-[#F4A85E]' : 'bg-[#34D399]'
+                        }`}
+                      />
+                      <span className="truncate max-w-[130px]">{t.memberName}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <Link
+              to="/monitoring"
+              className={`${
+                careEnabled ? 'lg:col-span-4' : 'lg:col-span-12'
+              } glass rounded-[22px] p-5 flex items-center justify-between gap-3 hover:border-[#34D399]/40 transition-all group`}
+            >
+              <div>
+                <div className="eyebrow text-[#34D399] flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5" /> MONITORING
+                </div>
+                <div className="text-sm font-semibold text-[#EDF4F0] mt-1">
+                  সদস্যদের সাম্প্রতিক রিপোর্ট
+                </div>
+                <p className="text-[11px] text-[#8EA39A] mt-0.5">
+                  সম্মতিপ্রাপ্ত সদস্যদের দৈনিক ও সাপ্তাহিক আপডেট দেখুন
+                </p>
+              </div>
+              <ArrowRight className="w-5 h-5 text-[#8EA39A] group-hover:text-[#34D399] shrink-0" />
+            </Link>
+          </div>
+        )}
 
         {/* 16 Stages Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 md:gap-4">

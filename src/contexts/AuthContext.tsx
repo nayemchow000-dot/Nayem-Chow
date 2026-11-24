@@ -1,12 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MemberAccount, Contact } from '../types';
+import { MemberAccount, Contact, MemberPermissions, PortalSettings } from '../types';
 import { apiFetch } from '../lib/api';
+
+const DEFAULT_FLAGS: PortalSettings = {
+  featureMyDawahTrack: true,
+  featureCareRadar: true,
+  careNoContactSoonDays: 7,
+  careNoContactUrgentDays: 14,
+  careStalledStageDays: 30,
+};
 
 interface AuthContextType {
   user: MemberAccount | null;
   token: string | null;
   loading: boolean;
   isAdmin: boolean;
+  isResponsible: boolean;
+  isCoordinator: boolean;
+  hasPermission: (key: keyof MemberPermissions) => boolean;
+  featureFlags: PortalSettings;
+  refreshFeatureFlags: () => Promise<void>;
   login: (usernameOrPhone: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, phone: string, area: string, password: string, username?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -21,12 +34,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<MemberAccount | null>(null);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('kotbari_auth_token'));
   const [loading, setLoading] = useState<boolean>(true);
+  const [featureFlags, setFeatureFlags] = useState<PortalSettings>(DEFAULT_FLAGS);
+
+  const refreshFeatureFlags = async () => {
+    try {
+      const res = await apiFetch('/api/portal/settings');
+      if (res.ok) {
+        const data = await res.json();
+        setFeatureFlags({ ...DEFAULT_FLAGS, ...data });
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const refreshUser = async () => {
     const savedToken = localStorage.getItem('kotbari_auth_token');
     if (!savedToken) {
       setUser(null);
       setLoading(false);
+      refreshFeatureFlags();
       return;
     }
 
@@ -41,6 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await res.json();
         setUser(data.user);
         setToken(savedToken);
+        if (data.featureFlags) {
+          setFeatureFlags({ ...DEFAULT_FLAGS, ...data.featureFlags });
+        }
         document.cookie = `kotbari_token=${savedToken}; path=/; SameSite=Lax; max-age=2592000`;
       } else if (res.status === 401 || res.status === 403) {
         localStorage.removeItem('kotbari_auth_token');
@@ -76,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       document.cookie = `kotbari_token=${data.token}; path=/; SameSite=Lax; max-age=2592000`;
       setToken(data.token);
       setUser(data.user);
+      refreshFeatureFlags();
       return { success: true };
     } catch (err: any) {
       return { success: false, error: 'সার্ভারে সংযোগ করা সম্ভব হয়নি।' };
@@ -99,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       document.cookie = `kotbari_token=${data.token}; path=/; SameSite=Lax; max-age=2592000`;
       setToken(data.token);
       setUser(data.user);
+      refreshFeatureFlags();
       return { success: true };
     } catch (err: any) {
       return { success: false, error: 'সার্ভারে সংযোগ করা সম্ভব হয়নি।' };
@@ -161,6 +193,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = user?.role === 'admin';
+  const isResponsible = user?.role === 'responsible';
+  const isCoordinator = isAdmin || isResponsible;
+  const hasPermission = (key: keyof MemberPermissions) => {
+    if (isAdmin) return true;
+    if (!isResponsible) return false;
+    return Boolean(user?.permissions?.[key]);
+  };
 
   return (
     <AuthContext.Provider value={{
@@ -168,6 +207,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       token,
       loading,
       isAdmin,
+      isResponsible,
+      isCoordinator,
+      hasPermission,
+      featureFlags,
+      refreshFeatureFlags,
       login,
       register,
       logout,

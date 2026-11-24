@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, User, KeyRound, ShieldCheck, CheckCircle2, ArrowRight, Eye, EyeOff, UserPlus, MapPin, Phone } from 'lucide-react';
+import { Lock, User, KeyRound, CheckCircle2, ArrowRight, Eye, EyeOff, UserPlus, MapPin, Phone } from 'lucide-react';
+import { BrandLogo } from '../components/BrandLogo';
 
 export default function Login() {
   const { login, register, user } = useAuth();
@@ -90,14 +91,13 @@ export default function Login() {
         <div className="absolute -top-36 -left-32 w-[460px] h-[460px] rounded-full bg-[#34D399]/16 blur-[120px]" />
         <div className="absolute top-1/4 -right-28 w-[380px] h-[380px] rounded-full bg-[#1C4A3F]/35 blur-[120px]" />
         <div className="absolute -bottom-36 right-12 w-[420px] h-[420px] rounded-full bg-[#DD7B3C]/14 blur-[130px]" />
-        <div className="absolute inset-0 forest-noise" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#34D399]/25 to-[#0E9F6E]/10 border border-[#34D399]/35 text-[#B6F5D8] mb-3.5 shadow-[0_0_28px_rgba(52,211,153,0.22)]">
-            <ShieldCheck className="w-7 h-7" />
+          <div className="flex justify-center mb-3.5">
+            <BrandLogo size="lg" />
           </div>
           <div className="eyebrow mb-1.5 text-[#34D399]">DAWAH TRACKING PORTAL</div>
           <h1 className="text-3xl font-serif font-semibold tracking-tight text-[#EDF4F0] mb-1.5 leading-snug">

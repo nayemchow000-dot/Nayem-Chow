@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
-import { STAGES } from "../types";
+import { z } from "zod";
+import { STAGES, UserRole } from "../types";
 
 let _aiClient: GoogleGenAI | null = null;
 
@@ -53,6 +54,12 @@ export interface VoiceAnalysisOutput {
     deeniyatTarget?: boolean | null;
     tafseerTarget?: boolean | null;
   };
+  selfVsAdminComparison?: Array<{
+    area: string;
+    selfReport: string;
+    adminObservation: string;
+    status: "agree" | "differ" | "unknown";
+  }>;
 }
 
 export interface GapAndGuidanceOutput {
@@ -114,9 +121,10 @@ export async function analyzeVoiceNoteForMember(params: {
   categories: DbCategory[];
   existingObservations: any[];
   transcription: string;
+  consentedSelfReportSummary?: string | null;
 }): Promise<VoiceAnalysisOutput> {
   const ai = getAiClient();
-  const { contact, categories, existingObservations, transcription } = params;
+  const { contact, categories, existingObservations, transcription, consentedSelfReportSummary } = params;
 
   const activeCategories = categories.filter((c) => c.isActive !== false);
   const categoryById = new Map(activeCategories.map((c) => [c.id, c]));
@@ -161,12 +169,19 @@ Administrator's Bengali Voice Note Transcription:
 """
 ${transcription}
 """
+${consentedSelfReportSummary ? `
+Member's Consented Recent Self Report Summary (shared by member consent — compare neutrally without verdict or judgment):
+"""
+${consentedSelfReportSummary}
+"""` : ''}
 
 Analyze the voice note carefully and return structured JSON matching the schema.`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: prompt,
+  let response: any;
+  try {
+    response = await ai.models.generateContent({
+      model: "gemini-4-hydrogen",
+      contents: prompt,
     config: {
       systemInstruction,
       thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
@@ -237,11 +252,32 @@ Analyze the voice note carefully and return structured JSON matching the schema.
           jummahTarget: { type: Type.BOOLEAN, description: "True if voice note indicates regular/early Jumu'ah, else false." },
           deeniyatTarget: { type: Type.BOOLEAN, description: "True if voice note indicates Diniyat / Quran class, else false." },
           tafseerTarget: { type: Type.BOOLEAN, description: "True if voice note indicates Tafsir / Study circle / Ilmi Muhajara, else false." },
+          selfVsAdminComparison: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                area: { type: Type.STRING, description: "Short Bengali label of the habit/area compared." },
+                selfReport: { type: Type.STRING, description: "What member's consented self-report indicates, in Bengali." },
+                adminObservation: { type: Type.STRING, description: "What admin voice note observes, in Bengali." },
+                status: { type: Type.STRING, description: "One of: agree, differ, unknown." },
+              },
+              required: ["area", "selfReport", "adminObservation", "status"],
+            },
+          },
         },
         required: ["observations", "suggestedCategories", "uncertainObservations"],
       },
     },
   });
+  } catch (err: any) {
+    console.warn("[AI Voice Analyze Fallback] Gemini unavailable, using deterministic Bengali matcher:", err?.message || err);
+    return buildDeterministicVoiceFallback({
+      transcription,
+      activeCategories,
+      consentedSelfReportSummary,
+    });
+  }
 
   const raw = JSON.parse((response.text ?? "{}").trim());
 
@@ -281,6 +317,16 @@ Analyze the voice note carefully and return structured JSON matching the schema.
       ? raw.suggestedStage
       : null;
 
+  const validStatuses = new Set(["agree", "differ", "unknown"]);
+  const comparison = consentedSelfReportSummary && Array.isArray(raw.selfVsAdminComparison)
+    ? raw.selfVsAdminComparison.slice(0, 6).map((c: any) => ({
+        area: String(c.area || ""),
+        selfReport: String(c.selfReport || "জানা যায়নি"),
+        adminObservation: String(c.adminObservation || "পর্যবেক্ষণ নেই"),
+        status: (validStatuses.has(c.status) ? c.status : "unknown") as "agree" | "differ" | "unknown",
+      }))
+    : undefined;
+
   return {
     observations: Array.isArray(raw.observations) ? raw.observations.map(String) : [],
     suggestedCategories: validatedSuggestions,
@@ -294,6 +340,86 @@ Analyze the voice note carefully and return structured JSON matching the schema.
       deeniyatTarget: typeof raw.deeniyatTarget === "boolean" && raw.deeniyatTarget ? true : null,
       tafseerTarget: typeof raw.tafseerTarget === "boolean" && raw.tafseerTarget ? true : null,
     },
+    ...(comparison ? { selfVsAdminComparison: comparison } : {}),
+  };
+}
+
+function buildDeterministicVoiceFallback(params: {
+  transcription: string;
+  activeCategories: DbCategory[];
+  consentedSelfReportSummary?: string | null;
+}): VoiceAnalysisOutput {
+  const text = params.transcription.trim();
+  const lower = text.toLowerCase();
+  const isUncertainTone = /মাঝে মাঝে|কখনো|চেষ্টা|হয়তো|মনে হয়/.test(lower);
+
+  const observations = text
+    .split(/[।.\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 4)
+    .slice(0, 5);
+  if (observations.length === 0 && text) observations.push(text);
+
+  const suggestedCategories: VoiceAnalysisOutput["suggestedCategories"] = [];
+  const uncertainObservations: VoiceAnalysisOutput["uncertainObservations"] = [];
+
+  for (const cat of params.activeCategories) {
+    const terms = [cat.name, cat.banglaName || ""]
+      .join(" ")
+      .toLowerCase()
+      .split(/[\s,/()-]+/)
+      .filter((w) => w.length >= 3);
+    const matched = terms.some((w) => lower.includes(w));
+    if (matched) {
+      if (isUncertainTone) {
+        uncertainObservations.push({
+          statement: observations[0] || text,
+          possibleCategoryId: cat.id,
+          possibleCategoryName: cat.banglaName || cat.name,
+          question: `কথাটিতে "${cat.banglaName || cat.name}" উল্লেখ আছে — এটি কি নিশ্চিত ক্যাটাগরি হিসেবে যুক্ত করবেন?`,
+        });
+      } else {
+        suggestedCategories.push({
+          categoryId: cat.id,
+          name: cat.name,
+          banglaName: cat.banglaName,
+          reason: `নোটের বক্তব্যে "${cat.banglaName || cat.name}" বিষয়ের মিল পাওয়া গেছে।`,
+          confidence: 0.78,
+        });
+      }
+    }
+  }
+
+  const fajrTarget = /ফজর|fajr/.test(lower) ? true : null;
+  const jummahTarget = /জুমা|জুমুআ|jumuah|jummah/.test(lower) ? true : null;
+  const deeniyatTarget = /দীনিয়াত|কুরআন|quran|deeniyat/.test(lower) ? true : null;
+  const tafseerTarget = /তাফসির|তাফসীর|মুহাজারা|পাঠচক্র|tafseer/.test(lower) ? true : null;
+
+  return {
+    observations,
+    suggestedCategories: suggestedCategories.slice(0, 6),
+    uncertainObservations: uncertainObservations.slice(0, 4),
+    indicatorUpdates: {
+      suggestedStage: null,
+      stageReason: null,
+      suggestedPriority: null,
+      fajrTarget,
+      jummahTarget,
+      deeniyatTarget,
+      tafseerTarget,
+    },
+    ...(params.consentedSelfReportSummary
+      ? {
+          selfVsAdminComparison: [
+            {
+              area: "সামগ্রিক নিয়মিততা",
+              selfReport: params.consentedSelfReportSummary,
+              adminObservation: observations[0] || text,
+              status: "unknown" as const,
+            },
+          ],
+        }
+      : {}),
   };
 }
 
@@ -347,9 +473,11 @@ Recent Activity Records Count: ${activityRecords.length}
 
 Generate structured Gap Analysis and Personalized Dawah Guidance in Bengali.`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: prompt,
+  let response: any;
+  try {
+    response = await ai.models.generateContent({
+      model: "gemini-4-hydrogen",
+      contents: prompt,
     config: {
       systemInstruction,
       thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
@@ -391,6 +519,26 @@ Generate structured Gap Analysis and Personalized Dawah Guidance in Bengali.`;
       },
     },
   });
+  } catch (err: any) {
+    console.warn("[AI Gap Guidance Fallback] Gemini unavailable, using deterministic guidance:", err?.message || err);
+    const nextStage = STAGES[Math.min(15, contact.currentStage || 1)] || STAGES[15];
+    return {
+      gapAnalysis: {
+        achieved: observations.slice(0, 3).map((o: any) => o.observation),
+        needsAttention: followUps.length === 0 ? ["এখনো প্রথম ফলো-আপ রেকর্ড যুক্ত হয়নি।"] : [],
+        unknownInfo: [!contact.phone ? "ফোন নম্বর রেকর্ড করা হয়নি" : "", !contact.area ? "এলাকা উল্লেখ নেই" : ""].filter(Boolean),
+        nextSteps: [`${contact.name}-এর সাথে সৌজন্যমূলক খোঁজখবর নিন ও পরবর্তী প্রোগ্রামে আমন্ত্রণ জানান।`],
+      },
+      dawahGuidance: {
+        nextStage,
+        topicToDiscuss: "নামাজের গুরুত্ব ও দ্বীনি পরিবেশে যুক্ত থাকার উপকারিতা",
+        adviceOrInvitation: `${contact.name}-কে আন্তরিকভাবে মসজিদ ও সপ্তাহের ইলমি আলোচনায় আসার দাওয়াত দিন।`,
+        activityToEncourage: "ফজর ও মাগরিবে জামাতে উপস্থিত থাকার চেষ্টা",
+        followUpQuestions: ["বাসা ও কাজের ব্যস্ততা কেমন যাচ্ছে?", "কোন সময় আমাদের বসা সহজ হবে?"],
+        practicalNextAction: "আগামী ২-৩ দিনের মধ্যে ছোট একটি কল বা সরাসরি সাক্ষাৎ",
+      },
+    };
+  }
 
   const parsed = JSON.parse((response.text ?? "{}").trim());
   return {
@@ -417,7 +565,7 @@ Generate structured Gap Analysis and Personalized Dawah Guidance in Bengali.`;
 export async function chatWithDawahAssistant(params: {
   history: Array<{ role: "user" | "model"; text: string }>;
   message: string;
-  userRole: "admin" | "member";
+  userRole: UserRole;
   userName: string;
   modelMode?: "standard" | "fast";
   contextSummary?: string;
@@ -426,11 +574,11 @@ export async function chatWithDawahAssistant(params: {
   const model = params.modelMode === "fast" ? "gemini-3.1-flash-lite" : "gemini-4-hydrogen";
 
   const systemInstruction =
-    params.userRole === "admin"
+    params.userRole === "admin" || params.userRole === "responsible"
       ? `আপনি কোটবাড়ি দাওয়াহ মুভমেন্ট (Kotbari Dawah Movement)-এর একজন প্রজ্ঞাবান, ভদ্র ও সহানুভূতিশীল দাওয়াহ সহায়ক (AI Dawah Assistant)।
-বর্তমান ব্যবহারকারী একজন অ্যাডমিন (${params.userName})।
+বর্তমান ব্যবহারকারী একজন ${params.userRole === "admin" ? "অ্যাডমিন" : "দায়িত্বশীল"} (${params.userName})।
 আপনার দায়িত্ব:
-- অ্যাডমিনকে দাওয়াহ সদস্যদের (ভাইদের) সাথে সুন্দর ও হিকমাহপূর্ণ যোগাযোগ, ফলো-আপ পরিকল্পনা, মিটিং/বয়ান/মুহাজারায় আমন্ত্রণ, এবং ১৬টি গ্রোথ স্টেজ অনুযায়ী ধাপে ধাপে অগ্রগতির পরামর্শ দেওয়া।
+- দাওয়াহ সদস্যদের (ভাইদের) সাথে সুন্দর ও হিকমাহপূর্ণ যোগাযোগ, ফলো-আপ পরিকল্পনা, মিটিং/বয়ান/মুহাজারায় আমন্ত্রণ, এবং ১৬টি গ্রোথ স্টেজ অনুযায়ী ধাপে ধাপে অগ্রগতির পরামর্শ দেওয়া।
 - কখনো কোনো ব্যক্তির ঈমান, ইখলাস বা আন্তরিকতা বিচার করবেন না। তথ্য না জানা থাকলে সেটিকে অনুমান করবেন না।
 - বাংলায় (বা ব্যবহারকারী যে ভাষায় প্রশ্ন করেন) সংক্ষিপ্ত, কার্যকর ও সম্মানজনক উত্তর দিন।
 ${params.contextSummary ? `\nপ্রসঙ্গিক সারসংক্ষেপ:\n${params.contextSummary}` : ""}`
@@ -470,3 +618,57 @@ ${params.contextSummary ? `\nপ্রসঙ্গিক সারসংক্�
     throw err;
   }
 }
+
+const careRefinementSchema = z.object({
+  title: z.string().min(4).max(120),
+  reason: z.string().min(4).max(260),
+  suggestedAction: z.string().min(6).max(320),
+  nextStepSummary: z.string().min(4).max(200),
+});
+
+export async function refineCareRadarWording(params: {
+  memberName: string;
+  currentStage: number;
+  signals: string[];
+  defaultTitle: string;
+  defaultReason: string;
+  defaultAction: string;
+}): Promise<z.infer<typeof careRefinementSchema> | null> {
+  if (!process.env.GEMINI_API_KEY) return null;
+  try {
+    const ai = getAiClient();
+    const prompt = `সদস্য: ${params.memberName} (ধাপ ${params.currentStage}/16)
+শনাক্তকৃত সিগন্যাল: ${params.signals.join(", ")}
+প্রাথমিক শিরোনাম: ${params.defaultTitle}
+কারণ: ${params.defaultReason}
+প্রাথমিক করণীয়: ${params.defaultAction}
+
+উপরের তথ্যের ভিত্তিতে সম্মানজনক, উষ্ণ, অ-বিচারমূলক ও বাস্তবসম্মত বাংলায় দায়িত্বশীলের জন্য সংক্ষিপ্ত কেয়ার অ্যাকশন সাজিয়ে দিন। কখনোই ঈমান বা আমল নিয়ে বিচার করবেন না।`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-4-hydrogen",
+      contents: prompt,
+      config: {
+        systemInstruction: "You refine Dawah follow-up task wording into gentle, respectful, actionable Bengali. Output JSON only.",
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            reason: { type: Type.STRING },
+            suggestedAction: { type: Type.STRING },
+            nextStepSummary: { type: Type.STRING },
+          },
+          required: ["title", "reason", "suggestedAction", "nextStepSummary"],
+        },
+      },
+    });
+    const parsed = JSON.parse((response.text ?? "{}").trim());
+    const validated = careRefinementSchema.safeParse(parsed);
+    return validated.success ? validated.data : null;
+  } catch {
+    return null;
+  }
+}
+

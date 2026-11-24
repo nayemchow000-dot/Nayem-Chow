@@ -11,9 +11,12 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(storedHash));
 }
 
+import type { UserRole, MemberPermissions } from '../types';
+
 export interface TokenPayload {
   userId: string;
-  role: 'admin' | 'member';
+  role: UserRole;
+  permissions?: MemberPermissions;
   contactId?: string | null;
   username: string;
   exp: number;

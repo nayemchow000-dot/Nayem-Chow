@@ -1,27 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router';
-import Dashboard from './pages/Dashboard';
-import Contacts from './pages/Contacts';
-import ContactProfile from './pages/ContactProfile';
-import Analytics from './pages/Analytics';
-import Activities from './pages/Activities';
-import Categories from './pages/Categories';
-import SettingsPage from './pages/Settings';
-import Login from './pages/Login';
-import MemberDashboard from './pages/MemberDashboard';
-import PublicProfile from './pages/PublicProfile';
-import AdminAccounts from './pages/AdminAccounts';
-import AIDashboard from './pages/AIDashboard';
 import GlobalSearchBar from './components/GlobalSearchBar';
 import DawahChatbot from './components/DawahChatbot';
-import { 
-  LayoutDashboard, Users, Settings, Activity, CalendarHeart, 
-  Tags, Menu, X, Shield, ShieldCheck, LogOut, Globe, User, 
-  Key, Sparkles 
+import TopCareRadarDropdown from './components/TopCareRadarDropdown';
+import CarePlanDrawer from './components/CarePlanDrawer';
+import { BrandLogo } from './components/BrandLogo';
+import {
+  LayoutDashboard, Users, Settings, Activity, CalendarHeart,
+  Tags, Menu, X, ShieldCheck, LogOut, Globe, User,
+  Sparkles, CheckSquare, Eye, Loader2
 } from 'lucide-react';
 import { cn } from './lib/utils';
-import { useBranding } from './contexts/BrandingContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { CareRadarProvider } from './contexts/CareRadarContext';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Contacts = lazy(() => import('./pages/Contacts'));
+const ContactProfile = lazy(() => import('./pages/ContactProfile'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Activities = lazy(() => import('./pages/Activities'));
+const Categories = lazy(() => import('./pages/Categories'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const Login = lazy(() => import('./pages/Login'));
+const MemberDashboard = lazy(() => import('./pages/MemberDashboard'));
+const PublicProfile = lazy(() => import('./pages/PublicProfile'));
+const AdminAccounts = lazy(() => import('./pages/AdminAccounts'));
+const AIDashboard = lazy(() => import('./pages/AIDashboard'));
+const MyDawahTrack = lazy(() => import('./pages/MyDawahTrack'));
+const Monitoring = lazy(() => import('./pages/Monitoring'));
+
+function PageFallback() {
+  return (
+    <div className="py-16 flex items-center justify-center">
+      <div className="glass px-5 py-3 rounded-2xl flex items-center gap-2.5 text-xs text-[#8EA39A]">
+        <Loader2 className="w-4 h-4 animate-spin text-[#34D399]" />
+        <span>লোড হচ্ছে...</span>
+      </div>
+    </div>
+  );
+}
 
 function ForestBackdrop() {
   return (
@@ -46,9 +63,6 @@ function ForestBackdrop() {
           fill="rgba(8, 19, 15, 0.72)"
         />
       </svg>
-
-      {/* Subtle grain texture */}
-      <div className="absolute inset-0 forest-noise opacity-90" />
     </div>
   );
 }
@@ -56,13 +70,21 @@ function ForestBackdrop() {
 function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { branding } = useBranding();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isResponsible, isCoordinator, hasPermission, featureFlags } = useAuth();
+
+  const myTrackLink = {
+    href: '/my-track',
+    label: 'My Dawah Track | আমার দাওয়াহ ট্র্যাক',
+    icon: CheckSquare,
+    badge: 'NEW',
+  };
 
   // Navigation Links based on role
-  const adminLinks = [
+  const adminLinks: Array<{ href: string; label: string; icon: any; badge?: string }> = [
     { href: '/', label: 'My Dawah Priority', icon: LayoutDashboard },
+    { href: '/monitoring', label: 'Monitoring | মনিটরিং', icon: Eye },
     { href: '/ai-dashboard', label: 'AI Dawah Center', icon: Sparkles },
+    ...(featureFlags.featureMyDawahTrack ? [myTrackLink] : []),
     { href: '/my-dashboard', label: 'আমার ড্যাশবোর্ড', icon: User },
     { href: '/contacts', label: 'Dawah Members', icon: Users },
     { href: '/categories', label: 'Brother Categories', icon: Tags },
@@ -71,13 +93,26 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
     { href: '/admin/accounts', label: 'মেম্বার অ্যাকাউন্টস', icon: ShieldCheck },
   ];
 
-  const memberLinks = [
+  const responsibleLinks: Array<{ href: string; label: string; icon: any; badge?: string }> = [
+    { href: '/', label: 'My Dawah Priority', icon: LayoutDashboard },
+    { href: '/monitoring', label: 'Monitoring | মনিটরিং', icon: Eye },
+    ...(hasPermission('useVoiceUpdate') ? [{ href: '/ai-dashboard', label: 'AI Dawah Center', icon: Sparkles }] : []),
+    ...(featureFlags.featureMyDawahTrack ? [myTrackLink] : []),
+    { href: '/my-dashboard', label: 'আমার ড্যাশবোর্ড', icon: User },
+    { href: '/contacts', label: 'Dawah Members', icon: Users },
+    { href: '/categories', label: 'Brother Categories', icon: Tags },
+    { href: '/activities', label: 'Regular Dawah Activity', icon: CalendarHeart },
+    { href: '/analytics', label: 'Growth Analytics', icon: Activity },
+  ];
+
+  const memberLinks: Array<{ href: string; label: string; icon: any; badge?: string }> = [
+    ...(featureFlags.featureMyDawahTrack ? [myTrackLink] : []),
     { href: '/my-dashboard', label: 'আমার ড্যাশবোর্ড', icon: User },
     { href: '/contacts', label: 'আমার মুভমেন্ট প্রোফাইল', icon: Users },
     { href: '/activities', label: 'দাওয়া কার্যক্রম', icon: CalendarHeart },
   ];
 
-  const links = isAdmin ? adminLinks : memberLinks;
+  const links = isAdmin ? adminLinks : isResponsible ? responsibleLinks : memberLinks;
 
   const handleLogout = () => {
     logout();
@@ -94,7 +129,7 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
       )}
       <aside
         className={cn(
-          "w-64 glass flex flex-col fixed top-0 left-0 z-50 h-screen transition-transform duration-300 ease-in-out lg:translate-x-0 lg:top-4 lg:left-4 lg:h-[calc(100vh-2rem)] lg:rounded-[24px] overflow-hidden",
+          "w-64 glass flex flex-col fixed top-0 left-0 z-50 h-screen transition-transform duration-300 ease-in-out lg:translate-x-0 lg:top-4 lg:left-4 lg:h-[calc(100vh-2rem)] lg:rounded-[24px] overflow-hidden no-print",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -107,19 +142,11 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
           >
             <X className="w-5 h-5" />
           </button>
-          {branding?.primaryLogo ? (
-            <img src={branding.primaryLogo} alt="Kotbari Dawah Movement" className="max-h-14 object-contain mb-2" />
-          ) : (
-            <div className="flex flex-col items-center text-center">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#34D399]/25 to-[#0E9F6E]/10 border border-[#34D399]/35 flex items-center justify-center text-[#B6F5D8] shadow-[0_0_24px_rgba(52,211,153,0.22)] mb-2">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <h2 className="text-xl font-serif italic tracking-tight text-[#EDF4F0] leading-tight">
-                Kotbari Dawah Movement
-              </h2>
-            </div>
-          )}
-          <p className="eyebrow mt-1.5 text-[9px] text-[#8EA39A]">Dawah Tracking Portal</p>
+          <BrandLogo size="md" className="mb-2" />
+          <h2 className="text-base font-serif italic tracking-tight text-[#EDF4F0] leading-tight text-center">
+            Kotbari Dawah Movement
+          </h2>
+          <p className="eyebrow mt-1 text-[9px] text-[#8EA39A]">Dawah Tracking Portal</p>
         </div>
 
         {/* User Card inside Sidebar */}
@@ -138,10 +165,12 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
                     className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border ${
                       user.role === 'admin'
                         ? 'bg-[#34D399]/15 text-[#B6F5D8] border-[#34D399]/30'
+                        : user.role === 'responsible'
+                        ? 'bg-[#F4A85E]/15 text-[#F4A85E] border-[#F4A85E]/30'
                         : 'bg-teal-500/15 text-teal-200 border-teal-400/25'
                     }`}
                   >
-                    {user.role === 'admin' ? 'Admin' : 'Member'}
+                    {user.role === 'admin' ? 'Admin' : user.role === 'responsible' ? 'দায়িত্বশীল' : 'Member'}
                   </span>
                   {user.isPublic && (
                     <Link
@@ -174,7 +203,7 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
                 to={link.href}
                 onClick={onClose}
                 className={cn(
-                  "relative flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all",
+                  "relative flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all",
                   isActive
                     ? "bg-gradient-to-r from-[#34D399]/18 to-[#34D399]/5 text-[#EDF4F0] border border-[#34D399]/30 shadow-[0_6px_18px_rgba(52,211,153,0.12)]"
                     : "text-[#8EA39A] hover:bg-white/[0.05] hover:text-[#EDF4F0] border border-transparent"
@@ -186,8 +215,15 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
                     aria-hidden="true"
                   />
                 )}
-                <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-[#34D399]" : "text-[#8EA39A]")} />
-                <span className="truncate">{link.label}</span>
+                <div className="flex items-center space-x-3 min-w-0">
+                  <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-[#34D399]" : "text-[#8EA39A]")} />
+                  <span className="truncate">{link.label}</span>
+                </div>
+                {link.badge && (
+                  <span className="px-1.5 py-0.5 rounded-md bg-[#34D399]/20 border border-[#34D399]/40 text-[#B6F5D8] text-[9px] font-mono shrink-0">
+                    {link.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -228,7 +264,7 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
 function ProtectedLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, isCoordinator, hasPermission } = useAuth();
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -251,76 +287,88 @@ function ProtectedLayout() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  const canAiCenter = isAdmin || hasPermission('useVoiceUpdate');
+
   return (
-    <div className="min-h-screen flex flex-col text-[#EDF4F0] font-sans relative">
-      <ForestBackdrop />
+    <CareRadarProvider>
+      <div className="min-h-screen flex flex-col text-[#EDF4F0] font-sans relative">
+        <ForestBackdrop />
 
-      <div className="flex flex-1 relative z-10">
-        <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+        <div className="flex flex-1 relative z-10">
+          <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
-        <div className="flex-1 lg:pl-[280px] flex flex-col min-w-0">
-          {/* Floating Glass Top Header with Global Search Bar */}
-          <div className="sticky top-0 z-30 px-4 sm:px-6 md:px-8 pt-3 sm:pt-4">
-            <header className="glass rounded-[20px] flex items-center justify-between gap-4 px-3.5 sm:px-5 py-2.5 max-w-6xl mx-auto">
-              <div className="flex items-center gap-2.5 shrink-0 lg:hidden">
-                <button
-                  type="button"
-                  onClick={() => setIsMobileMenuOpen(true)}
-                  className="p-2 -ml-1 text-[#EDF4F0] rounded-xl hover:bg-white/10 transition-colors"
-                  aria-label="Open menu"
-                >
-                  <Menu className="w-5 h-5" />
-                </button>
-                <span className="font-serif italic text-[#B6F5D8] font-medium text-base whitespace-nowrap">
-                  {user.contact?.name || 'দাওয়াহ মুভমেন্ট'}
-                </span>
-              </div>
-
-              <div className="flex-1 flex items-center justify-start lg:justify-between gap-4 min-w-0">
-                <GlobalSearchBar />
-
-                <div className="hidden md:flex items-center gap-3 shrink-0 text-xs">
-                  {isAdmin && (
-                    <Link
-                      to="/ai-dashboard"
-                      className="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-full bg-[#34D399]/14 hover:bg-[#34D399]/22 border border-[#34D399]/35 text-[#B6F5D8] font-medium flex items-center gap-1.5 transition-all"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-[#34D399]" />
-                      <span>AI Center</span>
-                    </Link>
-                  )}
-                  <span className="whitespace-nowrap shrink-0 text-[#8EA39A] font-medium">
-                    {user.contact?.name || user.username} · {user.role === 'admin' ? 'Admin' : 'Member'}
+          <div className="flex-1 lg:pl-[280px] flex flex-col min-w-0">
+            {/* Floating Glass Top Header with Global Search Bar & Care Radar Bell */}
+            <div className="sticky top-0 z-30 px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 no-print">
+              <header className="glass rounded-[20px] flex items-center justify-between gap-3 px-3.5 sm:px-5 py-2.5 max-w-6xl mx-auto">
+                <div className="flex items-center gap-2.5 shrink-0 lg:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="p-2 -ml-1 text-[#EDF4F0] rounded-xl hover:bg-white/10 transition-colors"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                  <span className="font-serif italic text-[#B6F5D8] font-medium text-base whitespace-nowrap truncate max-w-[120px] sm:max-w-none">
+                    {user.contact?.name || 'দাওয়াহ মুভমেন্ট'}
                   </span>
                 </div>
-              </div>
-            </header>
-          </div>
 
-          <main className="flex-1 px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col min-w-0 overflow-x-hidden">
-            <div className="flex-1 w-full max-w-6xl mx-auto">
-              <Routes>
-                {/* Member Landing defaults to MemberDashboard; Admin gets Circle Priority Dashboard */}
-                <Route path="/" element={isAdmin ? <Dashboard /> : <MemberDashboard />} />
-                <Route path="/ai-dashboard" element={isAdmin ? <AIDashboard /> : <Navigate to="/my-dashboard" replace />} />
-                <Route path="/my-dashboard" element={<MemberDashboard />} />
-                <Route path="/contacts" element={<Contacts />} />
-                <Route path="/contacts/:id" element={<ContactProfile />} />
-                <Route path="/categories" element={<Categories />} />
-                <Route path="/activities" element={<Activities />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/admin/accounts" element={isAdmin ? <AdminAccounts /> : <Navigate to="/my-dashboard" replace />} />
-                <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/my-dashboard" replace />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+                <div className="flex-1 flex items-center justify-end lg:justify-between gap-3 min-w-0">
+                  <GlobalSearchBar />
+
+                  <div className="flex items-center gap-2.5 shrink-0 text-xs">
+                    {isCoordinator && <TopCareRadarDropdown />}
+
+                    {canAiCenter && (
+                      <Link
+                        to="/ai-dashboard"
+                        className="hidden md:flex whitespace-nowrap shrink-0 px-3 py-1.5 rounded-full bg-[#34D399]/14 hover:bg-[#34D399]/22 border border-[#34D399]/35 text-[#B6F5D8] font-medium items-center gap-1.5 transition-all"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#34D399]" />
+                        <span>AI Center</span>
+                      </Link>
+                    )}
+
+                    <span className="hidden xl:inline whitespace-nowrap shrink-0 text-[#8EA39A] font-medium">
+                      {user.contact?.name || user.username} · {user.role === 'admin' ? 'Admin' : user.role === 'responsible' ? 'দায়িত্বশীল' : 'Member'}
+                    </span>
+                  </div>
+                </div>
+              </header>
             </div>
-          </main>
-        </div>
-      </div>
 
-      {/* Multi-turn Gemini Dawah Assistant */}
-      <DawahChatbot />
-    </div>
+            <main className="flex-1 px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col min-w-0 overflow-x-hidden">
+              <div className="flex-1 w-full max-w-6xl mx-auto">
+                <Suspense fallback={<PageFallback />}>
+                  <Routes>
+                    {/* Member Landing defaults to MemberDashboard; Admin/Responsible gets Priority Dashboard */}
+                    <Route path="/" element={isCoordinator ? <Dashboard /> : <MemberDashboard />} />
+                    <Route path="/my-track" element={<MyDawahTrack />} />
+                    <Route path="/monitoring" element={isCoordinator ? <Monitoring /> : <Navigate to="/my-track" replace />} />
+                    <Route path="/ai-dashboard" element={canAiCenter ? <AIDashboard /> : <Navigate to="/my-dashboard" replace />} />
+                    <Route path="/my-dashboard" element={<MemberDashboard />} />
+                    <Route path="/contacts" element={<Contacts />} />
+                    <Route path="/contacts/:id" element={<ContactProfile />} />
+                    <Route path="/categories" element={<Categories />} />
+                    <Route path="/activities" element={<Activities />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/admin/accounts" element={isAdmin ? <AdminAccounts /> : <Navigate to="/my-dashboard" replace />} />
+                    <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/my-dashboard" replace />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Suspense>
+              </div>
+            </main>
+          </div>
+        </div>
+
+        {/* Care Plan Drawer & Multi-turn Gemini Dawah Assistant */}
+        <CarePlanDrawer />
+        <DawahChatbot />
+      </div>
+    </CareRadarProvider>
   );
 }
 
@@ -328,15 +376,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public Routes (No Auth Required) */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/p/:slug" element={<PublicProfile />} />
-          <Route path="/public/member/:slug" element={<PublicProfile />} />
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            {/* Public Routes (No Auth Required) */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/p/:slug" element={<PublicProfile />} />
+            <Route path="/public/member/:slug" element={<PublicProfile />} />
 
-          {/* All other routes protected */}
-          <Route path="/*" element={<ProtectedLayout />} />
-        </Routes>
+            {/* All other routes protected */}
+            <Route path="/*" element={<ProtectedLayout />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );

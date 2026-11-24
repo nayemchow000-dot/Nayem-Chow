@@ -2,11 +2,22 @@ import crypto from 'crypto';
 import { Router } from 'express';
 import { db, ensureAiTables } from './db/db';
 import { contacts, followUps, observations, salahRecords, activityRecords, generalActivities, customCategories, brandingSettings, memberAccounts, aiVoiceEntries, memberAiInsights } from './db/schema';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, or } from 'drizzle-orm';
 import { hashPassword, verifyPassword, generateToken, parseToken, TokenPayload } from './lib/auth';
-import { STAGES } from './types';
+import { STAGES, UserRole } from './types';
 import { syncMemberAccounts } from './lib/syncAccounts';
 import { transcribeBengaliAudio, analyzeVoiceNoteForMember, generateGapAnalysisAndGuidance, chatWithDawahAssistant } from './lib/ai';
+import {
+  resolveAuthUser,
+  canAccessContact,
+  canCareForContact,
+  canUseVoiceForContact,
+  canDeleteContact,
+  getConsentedSelfReportForAdmin,
+  getPortalFeatureFlags,
+} from './lib/accessControl';
+import { portalRouter } from './lib/portalRoutes';
+import { recomputeCareForContact } from './lib/careRadar';
 
 export const apiRouter = Router();
 
@@ -15,20 +26,9 @@ ensureAiTables()
   .then(() => syncMemberAccounts())
   .catch(e => console.error('[Init Sync]', e));
 
-function getAuthUser(req: any): TokenPayload | null {
-  const authHeader = req.headers.authorization;
-  let token: string | null = null;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else if (req.headers.cookie) {
-    const match = req.headers.cookie.match(/kotbari_token=([^;]+)/);
-    if (match) {
-      token = decodeURIComponent(match[1]);
-    }
-  }
-  if (!token) return null;
-  return parseToken(token);
-}
+apiRouter.use('/', portalRouter);
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -51,6 +51,10 @@ apiRouter.get('/branding', async (req, res) => {
 
 apiRouter.put('/branding', async (req, res) => {
   try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const { primaryLogo, mobileLogo, favicon, heroBackground, cornerImage } = req.body;
     const existing = await db.select().from(brandingSettings).where(eq(brandingSettings.id, 1));
     
@@ -75,6 +79,10 @@ apiRouter.put('/branding', async (req, res) => {
 // Seed db if empty
 apiRouter.post('/seed', async (req, res) => {
   try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const existing = await db.select().from(contacts).limit(1);
     if (existing.length === 0) {
       await db.insert(contacts).values([
@@ -113,14 +121,20 @@ apiRouter.post('/seed', async (req, res) => {
 
 apiRouter.get('/contacts', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
-    // If a regular member is logged in, only return their own contact to protect other members' privacy
-    if (authUser && authUser.role === 'member' && authUser.contactId) {
-      const myContact = await db.select().from(contacts).where(eq(contacts.id, authUser.contactId));
-      return res.json(myContact);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
+
     const allContacts = await db.select().from(contacts).orderBy(desc(contacts.updatedAt));
-    res.json(allContacts);
+    if (authUser.role === 'admin') {
+      return res.json(allContacts);
+    }
+
+    // Responsible sees assigned members + own/created; regular members only see own + self-created
+    const filtered = allContacts.filter((c) => canAccessContact(authUser, c));
+    res.json(filtered);
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: error.message });
@@ -129,28 +143,82 @@ apiRouter.get('/contacts', async (req, res) => {
 
 apiRouter.post('/contacts', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
-    // Regular members cannot create other contacts directly
-    if (authUser && authUser.role === 'member') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন নতুন মেম্বার যোগ করতে পারবেন।' });
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
-    const newContact = await db.insert(contacts).values(req.body).returning();
+
+    const name = String(req.body?.name || '').trim();
+    if (!name) {
+      return res.status(400).json({ error: 'সদস্যের নাম আবশ্যক।' });
+    }
+
+    const validPriorities = ['growing', 'stable', 'needs_attention', 'high_priority'];
+    const priorityLevel = validPriorities.includes(req.body?.priorityLevel)
+      ? req.body.priorityLevel
+      : 'stable';
+
+    const rawStage = Number(req.body?.currentStage);
+    const currentStage = Number.isFinite(rawStage)
+      ? Math.min(16, Math.max(1, Math.round(rawStage)))
+      : 1;
+
+    const today = new Date().toISOString().split('T')[0];
+    const rawDate = req.body?.firstContactDate ? String(req.body.firstContactDate).trim() : '';
+    const firstContactDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : today;
+
+    const rawAge = req.body?.age;
+    const age =
+      rawAge !== undefined && rawAge !== null && rawAge !== '' && Number.isFinite(Number(rawAge))
+        ? Math.round(Number(rawAge))
+        : null;
+
+    const newContact = await db.insert(contacts).values({
+      name,
+      phone: req.body?.phone ? String(req.body.phone).trim() : null,
+      age,
+      area: req.body?.area ? String(req.body.area).trim() : null,
+      firstContactDate,
+      currentStage,
+      growthScore: 0,
+      weeklyChange: 0,
+      monthlyChange: 0,
+      priorityLevel,
+      fajrTarget: Boolean(req.body?.fajrTarget),
+      jummahTarget: Boolean(req.body?.jummahTarget),
+      deeniyatTarget: Boolean(req.body?.deeniyatTarget),
+      tafseerTarget: Boolean(req.body?.tafseerTarget),
+      categoryTags: [],
+      createdByAccountId: authUser.role === 'admin' ? null : authUser.userId,
+    }).returning();
+
+    recomputeCareForContact(newContact[0].id, { allowAiRefinement: false }).catch(() => {});
     res.json(newContact[0]);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'মেম্বার সংরক্ষণ করতে সমস্যা হয়েছে।' });
   }
 });
 
 apiRouter.get('/contacts/:id', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
-    // If a regular member is logged in, prevent them from accessing other members' private profiles
-    if (authUser && authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
-      return res.status(403).json({ error: 'অন্য কোনো মেম্বারের প্রাইভেট প্রোফাইল দেখার অনুমতি নেই।' });
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
+    if (!UUID_REGEX.test(req.params.id)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     const contact = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
     if (!contact.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canAccessContact(authUser, contact[0])) {
+      return res.status(403).json({ error: 'অন্য কোনো মেম্বারের প্রাইভেট প্রোফাইল দেখার অনুমতি নেই।' });
+    }
+
     res.json(contact[0]);
   } catch (error: any) {
     console.error(error);
@@ -160,24 +228,62 @@ apiRouter.get('/contacts/:id', async (req, res) => {
 
 apiRouter.put('/contacts/:id', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser) {
       return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
-    // Regular member can only update their own profile
-    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+    if (!UUID_REGEX.test(req.params.id)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const existing = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!existing.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canAccessContact(authUser, existing[0])) {
       return res.status(403).json({ error: 'অন্য কোনো মেম্বারের তথ্য পরিবর্তনের অনুমতি নেই।' });
     }
 
-    const dataToUpdate = { ...req.body };
-    delete dataToUpdate.id;
-    delete dataToUpdate.createdAt;
-    delete dataToUpdate.updatedAt;
+    const dataToUpdate: Record<string, any> = {};
+    if (req.body.name !== undefined) {
+      const cleanName = String(req.body.name).trim();
+      if (!cleanName) return res.status(400).json({ error: 'সদস্যের নাম খালি রাখা যাবে না।' });
+      dataToUpdate.name = cleanName;
+    }
+    if (req.body.phone !== undefined) dataToUpdate.phone = req.body.phone ? String(req.body.phone).trim() : null;
+    if (req.body.area !== undefined) dataToUpdate.area = req.body.area ? String(req.body.area).trim() : null;
+    if (req.body.age !== undefined) {
+      dataToUpdate.age = req.body.age === null || req.body.age === '' ? null : Number(req.body.age);
+    }
+    if (req.body.currentStage !== undefined && Number.isFinite(Number(req.body.currentStage))) {
+      dataToUpdate.currentStage = Math.min(16, Math.max(1, Math.round(Number(req.body.currentStage))));
+    }
+    if (req.body.growthScore !== undefined && Number.isFinite(Number(req.body.growthScore))) {
+      dataToUpdate.growthScore = Math.min(100, Math.max(0, Math.round(Number(req.body.growthScore))));
+    }
+    if (req.body.weeklyChange !== undefined && Number.isFinite(Number(req.body.weeklyChange))) {
+      dataToUpdate.weeklyChange = Math.round(Number(req.body.weeklyChange));
+    }
+    if (req.body.monthlyChange !== undefined && Number.isFinite(Number(req.body.monthlyChange))) {
+      dataToUpdate.monthlyChange = Math.round(Number(req.body.monthlyChange));
+    }
+    if (req.body.priorityLevel !== undefined && ['growing', 'stable', 'needs_attention', 'high_priority'].includes(req.body.priorityLevel)) {
+      dataToUpdate.priorityLevel = req.body.priorityLevel;
+    }
+    if (req.body.fajrTarget !== undefined) dataToUpdate.fajrTarget = !!req.body.fajrTarget;
+    if (req.body.jummahTarget !== undefined) dataToUpdate.jummahTarget = !!req.body.jummahTarget;
+    if (req.body.deeniyatTarget !== undefined) dataToUpdate.deeniyatTarget = !!req.body.deeniyatTarget;
+    if (req.body.tafseerTarget !== undefined) dataToUpdate.tafseerTarget = !!req.body.tafseerTarget;
+    if (req.body.photoUrl !== undefined) dataToUpdate.photoUrl = req.body.photoUrl || null;
+    if (authUser.role === 'admin' && Array.isArray(req.body.categoryTags)) {
+      dataToUpdate.categoryTags = req.body.categoryTags.map(String);
+    }
 
     const updatedContact = await db.update(contacts)
       .set({ ...dataToUpdate, updatedAt: new Date() })
       .where(eq(contacts.id, req.params.id))
       .returning();
+    recomputeCareForContact(req.params.id, { allowAiRefinement: false }).catch(() => {});
     res.json(updatedContact[0]);
   } catch (error: any) {
     console.error(error);
@@ -187,10 +293,20 @@ apiRouter.put('/contacts/:id', async (req, res) => {
 
 apiRouter.delete('/contacts/:id', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
-    // Only admin can delete contacts
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন মেম্বার ডিলিট করতে পারবেন।' });
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+    if (!UUID_REGEX.test(req.params.id)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const existing = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!existing.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canDeleteContact(authUser, existing[0])) {
+      return res.status(403).json({ error: 'এই মেম্বার ডিলিট করার অনুমতি নেই।' });
     }
 
     const contactId = req.params.id;
@@ -211,8 +327,19 @@ apiRouter.delete('/contacts/:id', async (req, res) => {
 
 apiRouter.get('/contacts/:id/salah', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
-    if (authUser && authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+    if (!UUID_REGEX.test(req.params.id)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const existing = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!existing.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canAccessContact(authUser, existing[0])) {
       return res.status(403).json({ error: 'অন্য কোনো মেম্বারের সালাহ রেকর্ড দেখার অনুমতি নেই।' });
     }
     const records = await db.select().from(salahRecords).where(eq(salahRecords.contactId, req.params.id));
@@ -225,11 +352,19 @@ apiRouter.get('/contacts/:id/salah', async (req, res) => {
 
 apiRouter.post('/contacts/:id/salah', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser) {
       return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
-    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+    if (!UUID_REGEX.test(req.params.id)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const existing = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!existing.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canAccessContact(authUser, existing[0])) {
       return res.status(403).json({ error: 'অন্য কোনো মেম্বারের সালাহ রেকর্ড পরিবর্তনের অনুমতি নেই।' });
     }
 
@@ -244,6 +379,7 @@ apiRouter.post('/contacts/:id/salah', async (req, res) => {
       contactId, date, fajr, dhuhr, asr, maghrib, isha
     }).returning();
     
+    recomputeCareForContact(contactId, { allowAiRefinement: false }).catch(() => {});
     res.json(newRecord[0]);
   } catch (error: any) {
     console.error(error);
@@ -263,7 +399,16 @@ apiRouter.get('/activities', async (req, res) => {
 
 apiRouter.post('/activities', async (req, res) => {
   try {
-    const newActivity = await db.insert(generalActivities).values(req.body).returning();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
+    }
+    const { activityType, date, notes } = req.body;
+    const newActivity = await db.insert(generalActivities).values({
+      activityType: String(activityType || 'Other'),
+      date: date || new Date().toISOString().split('T')[0],
+      notes: notes ? String(notes) : null,
+    }).returning();
     res.json(newActivity[0]);
   } catch (error: any) {
     console.error(error);
@@ -283,6 +428,10 @@ apiRouter.get('/custom-categories', async (req, res) => {
 
 apiRouter.post('/custom-categories', async (req, res) => {
   try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const newCategory = await db.insert(customCategories).values(req.body).returning();
     res.json(newCategory[0]);
   } catch (error: any) {
@@ -293,6 +442,10 @@ apiRouter.post('/custom-categories', async (req, res) => {
 
 apiRouter.put('/custom-categories/:id', async (req, res) => {
   try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const oldCat = await db.select().from(customCategories).where(eq(customCategories.id, req.params.id));
     if (!oldCat.length) return res.status(404).json({error: 'Not found'});
     
@@ -329,6 +482,10 @@ apiRouter.put('/custom-categories/:id', async (req, res) => {
 
 apiRouter.delete('/custom-categories/:id', async (req, res) => {
   try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const oldCat = await db.select().from(customCategories).where(eq(customCategories.id, req.params.id));
     if (oldCat.length > 0) {
        const oldName = oldCat[0].name;
@@ -351,6 +508,10 @@ apiRouter.delete('/custom-categories/:id', async (req, res) => {
 
 apiRouter.post('/contacts/bulk-assign-category', async (req, res) => {
   try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const { categoryName, addedContactIds, removedContactIds } = req.body;
     
     if (addedContactIds && addedContactIds.length > 0) {
@@ -454,9 +615,12 @@ apiRouter.post('/auth/login', async (req, res) => {
       if (c.length > 0) contactData = c[0];
     }
 
+    const roleVal: UserRole =
+      matched.role === 'admin' ? 'admin' : matched.role === 'responsible' ? 'responsible' : 'member';
     const token = generateToken({
       userId: matched.id,
-      role: matched.role as 'admin' | 'member',
+      role: roleVal,
+      permissions: (matched.permissions || {}) as any,
       contactId: matched.contactId,
       username: matched.username,
     });
@@ -600,7 +764,8 @@ apiRouter.post('/auth/register', async (req, res) => {
 // Current User Details
 apiRouter.get('/auth/me', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser) {
       return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
@@ -617,12 +782,15 @@ apiRouter.get('/auth/me', async (req, res) => {
       if (c.length > 0) contactData = c[0];
     }
 
+    const flags = await getPortalFeatureFlags();
     const { passwordHash, ...safeUser } = account;
     res.json({
       user: {
         ...safeUser,
+        assignedContactIds: Array.from(authUser.assignedContactIds),
         contact: contactData,
-      }
+      },
+      featureFlags: flags,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -632,7 +800,7 @@ apiRouter.get('/auth/me', async (req, res) => {
 // Update Member Privacy Settings
 apiRouter.put('/auth/privacy', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
 
     // Admins can update any member's privacy, regular members only their own
@@ -680,7 +848,7 @@ apiRouter.put('/auth/privacy', async (req, res) => {
 // Update Password
 apiRouter.put('/auth/password', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
 
     const { currentPassword, newPassword } = req.body;
@@ -814,7 +982,8 @@ apiRouter.get('/public/profile/:slug', async (req, res) => {
 
 apiRouter.get('/admin/accounts', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser || authUser.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -839,12 +1008,13 @@ apiRouter.get('/admin/accounts', async (req, res) => {
 
 apiRouter.post('/admin/accounts', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser || authUser.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { username, password, role, contactId, isPublic, customBio } = req.body;
+    const { username, password, role, permissions, contactId, isPublic, customBio } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
@@ -856,11 +1026,14 @@ apiRouter.post('/admin/accounts', async (req, res) => {
 
     const passwordHash = hashPassword(password);
     const shareSlug = `brother-${Math.random().toString(36).substring(2, 9)}`;
+    const validRole: UserRole =
+      role === 'admin' ? 'admin' : role === 'responsible' ? 'responsible' : 'member';
 
     const newAcc = await db.insert(memberAccounts).values({
       username: String(username).trim(),
       passwordHash,
-      role: role === 'admin' ? 'admin' : 'member',
+      role: validRole,
+      permissions: permissions && typeof permissions === 'object' ? permissions : {},
       contactId: contactId || null,
       isPublic: !!isPublic,
       shareSlug,
@@ -876,15 +1049,17 @@ apiRouter.post('/admin/accounts', async (req, res) => {
 
 apiRouter.put('/admin/accounts/:id', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser || authUser.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { role, isActive, password, isPublic, contactId, customBio, shareSlug } = req.body;
+    const { role, permissions, isActive, password, isPublic, contactId, customBio, shareSlug } = req.body;
     const updateData: any = { updatedAt: new Date() };
 
-    if (role !== undefined) updateData.role = role;
+    if (role !== undefined && ['admin', 'responsible', 'member'].includes(role)) updateData.role = role;
+    if (permissions !== undefined && typeof permissions === 'object') updateData.permissions = permissions;
     if (isActive !== undefined) updateData.isActive = !!isActive;
     if (isPublic !== undefined) updateData.isPublic = !!isPublic;
     if (contactId !== undefined) updateData.contactId = contactId || null;
@@ -911,7 +1086,7 @@ apiRouter.put('/admin/accounts/:id', async (req, res) => {
 
 apiRouter.delete('/admin/accounts/:id', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser || authUser.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -928,18 +1103,18 @@ apiRouter.delete('/admin/accounts/:id', async (req, res) => {
 // ==========================================
 apiRouter.get('/search', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
     if (!authUser) {
       return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
 
     const q = String(req.query.q || '').trim().toLowerCase();
-    const [allContacts, allCategories] = await Promise.all([
-      authUser.role === 'member' && authUser.contactId
-        ? db.select().from(contacts).where(eq(contacts.id, authUser.contactId))
-        : db.select().from(contacts).orderBy(desc(contacts.updatedAt)),
+    const [rawContacts, allCategories] = await Promise.all([
+      db.select().from(contacts).orderBy(desc(contacts.updatedAt)),
       db.select().from(customCategories),
     ]);
+    const allContacts = authUser.role === 'admin' ? rawContacts : rawContacts.filter(c => canAccessContact(authUser, c));
 
     const catMap = new Map(allCategories.map(c => [c.name.toLowerCase(), c]));
     const matchingCategoryNames = new Set(
@@ -998,9 +1173,14 @@ apiRouter.get('/search', async (req, res) => {
 apiRouter.get('/contacts/:id/follow-ups', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
-    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+    if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+
+    const existing = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!existing.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canAccessContact(authUser, existing[0])) {
       return res.status(403).json({ error: 'অনুমতি নেই।' });
     }
 
@@ -1017,9 +1197,13 @@ apiRouter.get('/contacts/:id/follow-ups', async (req, res) => {
 apiRouter.post('/contacts/:id/follow-ups', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন ফলো-আপ ও রিমাইন্ডার যোগ করতে পারবেন।' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+    if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+    const contactRows = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!contactRows.length) return res.status(404).json({ error: 'Not found' });
+    if (!canCareForContact(authUser, contactRows[0])) {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন বা দায়িত্বশীল ফলো-আপ ও রিমাইন্ডার যোগ করতে পারবেন।' });
     }
 
     const { date, durationMinutes, topic, response, nextAction, nextActionDate, assignedTo, reminderNote } = req.body;
@@ -1038,6 +1222,7 @@ apiRouter.post('/contacts/:id/follow-ups', async (req, res) => {
       isCompleted: false,
     }).returning();
 
+    recomputeCareForContact(req.params.id, { allowAiRefinement: false }).catch(() => {});
     res.json(created[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1047,9 +1232,9 @@ apiRouter.post('/contacts/:id/follow-ups', async (req, res) => {
 apiRouter.put('/follow-ups/:followUpId', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
+      return res.status(403).json({ error: 'Admin or responsible access required' });
     }
 
     const { isCompleted, nextActionDate, assignedTo, reminderNote, nextAction, topic, response } = req.body;
@@ -1071,6 +1256,7 @@ apiRouter.put('/follow-ups/:followUpId', async (req, res) => {
       .returning();
 
     if (updated.length === 0) return res.status(404).json({ error: 'Follow-up not found' });
+    recomputeCareForContact(updated[0].contactId, { allowAiRefinement: false }).catch(() => {});
     res.json(updated[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1080,7 +1266,7 @@ apiRouter.put('/follow-ups/:followUpId', async (req, res) => {
 apiRouter.delete('/follow-ups/:followUpId', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser || authUser.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
@@ -1099,9 +1285,12 @@ apiRouter.delete('/follow-ups/:followUpId', async (req, res) => {
 // 1. Transcribe Bengali voice note audio
 apiRouter.post('/ai/transcribe', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন ভয়েস ইনপুট ব্যবহার করতে পারবেন।' });
+    const authUser = await resolveAuthUser(req);
+    const canTranscribe =
+      authUser &&
+      (authUser.role === 'admin' || (authUser.role === 'responsible' && !!authUser.permissions?.useVoiceUpdate));
+    if (!canTranscribe) {
+      return res.status(403).json({ error: 'শুধুমাত্র অনুমোদিত অ্যাডমিন/দায়িত্বশীল ভয়েস ইনপুট ব্যবহার করতে পারবেন।' });
     }
 
     const { audioBase64, mimeType } = req.body;
@@ -1121,9 +1310,9 @@ apiRouter.post('/ai/transcribe', async (req, res) => {
 apiRouter.post('/ai/analyze-voice', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন AI বিশ্লেষণ চালাতে পারবেন।' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'অনুগ্রহ করে লগইন করুন।' });
     }
 
     const { contactId, transcription, originalTranscription } = req.body;
@@ -1131,10 +1320,11 @@ apiRouter.post('/ai/analyze-voice', async (req, res) => {
       return res.status(400).json({ error: 'মেম্বার আইডি এবং বাংলা নোট আবশ্যক।' });
     }
 
-    const [contactRows, allCategories, existingObs] = await Promise.all([
+    const [contactRows, allCategories, existingObs, consentedSelf] = await Promise.all([
       db.select().from(contacts).where(eq(contacts.id, contactId)),
       db.select().from(customCategories).orderBy(desc(customCategories.displayOrder)),
       db.select().from(observations).where(eq(observations.contactId, contactId)).orderBy(desc(observations.date)).limit(15),
+      getConsentedSelfReportForAdmin(contactId),
     ]);
 
     if (contactRows.length === 0) {
@@ -1142,11 +1332,22 @@ apiRouter.post('/ai/analyze-voice', async (req, res) => {
     }
 
     const contact = contactRows[0];
+    if (!canUseVoiceForContact(authUser, contact)) {
+      return res.status(403).json({ error: 'শুধুমাত্র অনুমোদিত অ্যাডমিন/দায়িত্বশীল ভয়েস বিশ্লেষণ চালাতে পারবেন।' });
+    }
+
+    let consentedSummary: string | null = null;
+    if (consentedSelf.monitoringEnabled && (consentedSelf.dailyReports.length > 0 || consentedSelf.weeklySummary)) {
+      const latest = consentedSelf.dailyReports[0];
+      consentedSummary = `সম্মতিভিত্তিক সাম্প্রতিক রিপোর্ট: ${consentedSelf.dailyReports.length} দিন; সাপ্তাহিক অগ্রগতি: ${consentedSelf.weeklySummary?.completionPct ?? 'তথ্য নেই'}%; সর্বশেষ রিপোর্ট তারিখ: ${latest?.reportDate || 'নেই'}`;
+    }
+
     const analysis = await analyzeVoiceNoteForMember({
       contact,
       categories: allCategories,
       existingObservations: existingObs,
       transcription: String(transcription).trim(),
+      consentedSelfReportSummary: consentedSummary,
     });
 
     const currentTags = new Set((contact.categoryTags || []).map(t => t.toLowerCase()));
@@ -1170,6 +1371,8 @@ apiRouter.post('/ai/analyze-voice', async (req, res) => {
 
     res.json({
       entry: pendingEntry[0],
+      selfVsAdminComparison: analysis.selfVsAdminComparison || null,
+      monitoringConsented: consentedSelf.monitoringEnabled,
       member: {
         id: contact.id,
         name: contact.name,
@@ -1190,9 +1393,9 @@ apiRouter.post('/ai/analyze-voice', async (req, res) => {
 apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন অনুমোদন (Approve) করতে পারবেন।' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const entryRows = await db.select().from(aiVoiceEntries).where(eq(aiVoiceEntries.id, req.params.entryId));
@@ -1225,6 +1428,9 @@ apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
       return res.status(404).json({ error: 'মেম্বার খুঁজে পাওয়া যায়নি।' });
     }
     const contact = contactRows[0];
+    if (!canUseVoiceForContact(authUser, contact)) {
+      return res.status(403).json({ error: 'শুধুমাত্র অনুমোদিত অ্যাডমিন/দায়িত্বশীল অনুমোদন (Approve) করতে পারবেন।' });
+    }
 
     // Validate approved category IDs strictly against real DB categories
     const catById = new Map(allCategories.map(c => [c.id, c]));
@@ -1264,7 +1470,7 @@ apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
       .returning();
     const updatedContact = updatedContacts[0];
 
-    // Save approved observations into observations table for auditability
+    // Save approved observations into observations table with source='voice' & sourceVoiceEntryId
     const todayStr = new Date().toISOString().split('T')[0];
     const obsList: string[] = Array.isArray(approvedObservations) && approvedObservations.length > 0
       ? approvedObservations.map(String).filter(Boolean)
@@ -1277,6 +1483,8 @@ apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
           category: 'AI Voice Note',
           observation: text,
           level: 'observed',
+          source: 'voice',
+          sourceVoiceEntryId: entry.id,
           date: todayStr,
         }))
       );
@@ -1347,6 +1555,9 @@ apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
       console.error('[Post-Approval Insights Warning]', insightErr);
     }
 
+    // Recompute Care Radar snapshot & tasks after voice approval
+    recomputeCareForContact(contact.id, { allowAiRefinement: true }).catch(() => {});
+
     res.json({
       success: true,
       entry: updatedEntryRows[0],
@@ -1363,9 +1574,16 @@ apiRouter.post('/ai/voice-entries/:entryId/approve', async (req, res) => {
 apiRouter.post('/ai/voice-entries/:entryId/cancel', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || (authUser.role !== 'admin' && !(authUser.role === 'responsible' && authUser.permissions?.useVoiceUpdate))) {
+      return res.status(403).json({ error: 'Admin or authorized responsible access required' });
+    }
+
+    const entryRows = await db.select().from(aiVoiceEntries).where(eq(aiVoiceEntries.id, req.params.entryId));
+    if (entryRows.length === 0) return res.status(404).json({ error: 'Entry not found' });
+    const contactRows = await db.select().from(contacts).where(eq(contacts.id, entryRows[0].contactId));
+    if (contactRows.length === 0 || !canUseVoiceForContact(authUser, contactRows[0])) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const updated = await db.update(aiVoiceEntries)
@@ -1373,7 +1591,6 @@ apiRouter.post('/ai/voice-entries/:entryId/cancel', async (req, res) => {
       .where(eq(aiVoiceEntries.id, req.params.entryId))
       .returning();
 
-    if (updated.length === 0) return res.status(404).json({ error: 'Entry not found' });
     res.json({ success: true, entry: updated[0] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1384,9 +1601,15 @@ apiRouter.post('/ai/voice-entries/:entryId/cancel', async (req, res) => {
 apiRouter.get('/contacts/:id/voice-history', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
+      return res.status(403).json({ error: 'Admin or responsible access required' });
+    }
+    if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+    const contactRows = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (contactRows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (!canAccessContact(authUser, contactRows[0])) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const entries = await db.select().from(aiVoiceEntries)
@@ -1403,9 +1626,14 @@ apiRouter.get('/contacts/:id/voice-history', async (req, res) => {
 apiRouter.get('/contacts/:id/insights', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
-    if (authUser.role === 'member' && authUser.contactId && authUser.contactId !== req.params.id) {
+    if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+
+    const existing = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
+    if (!existing.length) return res.status(404).json({ error: 'Not found' });
+
+    if (!canAccessContact(authUser, existing[0])) {
       return res.status(403).json({ error: 'অনুমতি নেই।' });
     }
 
@@ -1429,10 +1657,11 @@ apiRouter.get('/contacts/:id/insights', async (req, res) => {
 apiRouter.post('/contacts/:id/insights/refresh', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন AI বিশ্লেষণ তৈরি বা আপডেট করতে পারবেন।' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
+      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন বা দায়িত্বশীল AI বিশ্লেষণ তৈরি বা আপডেট করতে পারবেন।' });
     }
+    if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
 
     const contactId = req.params.id;
     const [contactRows, allCategories, allObs, salahList, followUpList, actList] = await Promise.all([
@@ -1445,6 +1674,9 @@ apiRouter.post('/contacts/:id/insights/refresh', async (req, res) => {
     ]);
 
     if (contactRows.length === 0) return res.status(404).json({ error: 'Member not found' });
+    if (!canCareForContact(authUser, contactRows[0])) {
+      return res.status(403).json({ error: 'এই সদস্যের AI বিশ্লেষণ আপডেট করার অনুমতি নেই।' });
+    }
 
     const generated = await generateGapAnalysisAndGuidance({
       contact: contactRows[0],
@@ -1489,18 +1721,24 @@ apiRouter.post('/contacts/:id/insights/refresh', async (req, res) => {
 apiRouter.get('/ai/dashboard', async (req, res) => {
   try {
     await ensureAiTables();
-    const authUser = getAuthUser(req);
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
+      return res.status(403).json({ error: 'Admin or responsible access required' });
     }
 
-    const [allContacts, allEntries, allFollowUps, allObs, allCats] = await Promise.all([
+    const [rawContacts, rawEntries, rawFollowUps, rawObs, allCats] = await Promise.all([
       db.select().from(contacts).orderBy(desc(contacts.updatedAt)),
       db.select().from(aiVoiceEntries).orderBy(desc(aiVoiceEntries.createdAt)).limit(50),
       db.select().from(followUps).orderBy(desc(followUps.createdAt)),
       db.select().from(observations).orderBy(desc(observations.createdAt)).limit(25),
       db.select().from(customCategories),
     ]);
+
+    const allContacts = rawContacts.filter(c => canCareForContact(authUser, c));
+    const allowedIds = new Set(allContacts.map(c => c.id));
+    const allEntries = rawEntries.filter(e => allowedIds.has(e.contactId));
+    const allFollowUps = rawFollowUps.filter(f => allowedIds.has(f.contactId));
+    const allObs = rawObs.filter(o => allowedIds.has(o.contactId));
 
     const contactMap = new Map(allContacts.map(c => [c.id, c]));
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1589,7 +1827,7 @@ apiRouter.get('/ai/dashboard', async (req, res) => {
 // ==========================================
 apiRouter.post('/ai/chat', async (req, res) => {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await resolveAuthUser(req);
     if (!authUser) {
       return res.status(401).json({ error: 'চ্যাট ব্যবহার করতে অনুগ্রহ করে লগইন করুন।' });
     }
@@ -1600,9 +1838,9 @@ apiRouter.post('/ai/chat', async (req, res) => {
     }
 
     let contextSummary = '';
-    if (contactId && (authUser.role === 'admin' || authUser.contactId === contactId)) {
+    if (contactId && UUID_REGEX.test(String(contactId))) {
       const cRows = await db.select().from(contacts).where(eq(contacts.id, contactId));
-      if (cRows.length > 0) {
+      if (cRows.length > 0 && canAccessContact(authUser, cRows[0])) {
         const c = cRows[0];
         contextSummary = `বর্তমান নির্বাচিত সদস্য: ${c.name}, স্টেজ: ${c.currentStage}/16 (${STAGES[(c.currentStage || 1) - 1] || ''}), এলাকা: ${c.area || 'অজানা'}, ক্যাটাগরি: ${(c.categoryTags || []).join(', ') || 'নেই'}`;
       }

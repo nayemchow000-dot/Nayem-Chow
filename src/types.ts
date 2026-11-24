@@ -18,6 +18,7 @@ export interface Contact {
   tafseerTarget?: boolean;
   photoUrl?: string;
   categoryTags?: string[];
+  createdByAccountId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -125,6 +126,8 @@ export interface Observation {
   category: string;
   observation: string;
   level?: string | null;
+  source?: string | null;
+  sourceVoiceEntryId?: string | null;
   date: string;
   createdAt: string;
 }
@@ -148,6 +151,14 @@ export const STAGES = [
   "সক্রিয় দাওয়াহ কর্মী"
 ];
 
+export type UserRole = 'admin' | 'responsible' | 'member';
+
+export interface MemberPermissions {
+  viewAssignedMembers?: boolean;
+  logDawahForOthers?: boolean;
+  useVoiceUpdate?: boolean;
+}
+
 export interface PrivacySettings {
   isPublic: boolean;
   shareSlug?: string | null;
@@ -165,11 +176,13 @@ export interface MemberAccount extends PrivacySettings {
   id: string;
   contactId?: string | null;
   username: string;
-  role: 'admin' | 'member';
+  role: UserRole;
+  permissions?: MemberPermissions;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   contact?: Contact | null;
+  assignedContactIds?: string[];
 }
 
 export interface PublicProfileData {
@@ -201,5 +214,120 @@ export interface PublicProfileData {
     showPhone: boolean;
     showArea: boolean;
   };
+}
+
+export interface TrackerItem {
+  id: string;
+  key: string;
+  banglaLabel: string;
+  group: 'amal' | 'dawah';
+  isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
+}
+
+export interface MemberDailyReport {
+  id: string;
+  memberAccountId: string;
+  contactId?: string | null;
+  reportDate: string;
+  items: Record<string, boolean>;
+  note?: string | null;
+  status: 'draft' | 'submitted' | 'skipped';
+  wasSharedAtSubmit?: boolean;
+  submittedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemberDawahLog {
+  id: string;
+  memberAccountId: string;
+  date: string;
+  targetContactId?: string | null;
+  targetName?: string | null;
+  description: string;
+  outcome?: string | null;
+  createdAt: string;
+}
+
+export interface MemberNote {
+  id: string;
+  memberAccountId: string;
+  date: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface MemberSharingSettings {
+  memberAccountId: string;
+  monitoringEnabled: boolean;
+  shareDailyAmal: boolean;
+  shareDawahActivities: boolean;
+  sharePersonalNotes: boolean;
+  shareWeeklySummary: boolean;
+  updatedAt: string;
+}
+
+export type CareUrgency = 'urgent' | 'soon' | 'ok';
+export type CareChannel = 'call' | 'whatsapp' | 'visit' | 'mosque' | 'note';
+export type CareTaskStatus = 'open' | 'done' | 'snoozed' | 'dismissed';
+
+export interface CareTask {
+  id: string;
+  contactId: string;
+  assignedAccountId?: string | null;
+  urgency: CareUrgency;
+  title: string;
+  reason: string;
+  suggestedAction: string;
+  channel: CareChannel;
+  dueAt?: string | null;
+  status: CareTaskStatus;
+  snoozedUntil?: string | null;
+  cycleNo: number;
+  sourceSignals: string[];
+  completedOutcome?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CareSnapshot {
+  contactId: string;
+  gapKeys: string[];
+  urgency: CareUrgency;
+  openTaskCount: number;
+  nextStepSummary?: string | null;
+  aiRefinedAt?: string | null;
+  recomputedAt: string;
+}
+
+export interface MemberCareSummary {
+  contactId: string;
+  urgency: CareUrgency;
+  openTaskCount: number;
+  gapKeys: string[];
+  nextStepSummary?: string | null;
+  topTask?: CareTask | null;
+}
+
+export interface MemberReminder {
+  id: string;
+  memberAccountId: string;
+  itemKey?: string | null;
+  title?: string | null;
+  time: string;
+  daysOfWeek: number[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface PortalSettings {
+  featureMyDawahTrack: boolean;
+  featureCareRadar: boolean;
+  careNoContactSoonDays: number;
+  careNoContactUrgentDays: number;
+  careStalledStageDays: number;
 }
 

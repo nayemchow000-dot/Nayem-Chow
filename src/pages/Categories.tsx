@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Dialog, Dialog
 import { Plus, Search, Edit2, Users, Check, Save, Image as ImageIcon, CheckSquare, Square, X, MapPin, Phone, MessageCircle, MoreVertical } from 'lucide-react';
 import { Contact } from '../types';
 import { apiFetch } from '../lib/api';
+import CareRadarBell from '../components/CareRadarBell';
 
 export default function Categories() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -366,7 +367,8 @@ export default function Categories() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0 sm:opacity-70 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-2 shrink-0 sm:opacity-80 group-hover:opacity-100 transition-opacity">
+                          <CareRadarBell contactId={contact.id} compact />
                           <a href={`tel:${contact.phone}`} className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/[0.06] border border-white/10 text-[#8EA39A] hover:text-[#B6F5D8] hover:border-[#34D399]/35 transition-colors">
                             <Phone className="w-4 h-4" />
                           </a>

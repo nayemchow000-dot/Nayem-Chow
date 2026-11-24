@@ -31,7 +31,9 @@ import {
 } from '../types';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useCareRadar } from '../contexts/CareRadarContext';
 import VoiceDawahModal from '../components/VoiceDawahModal';
+import CareRadarBell from '../components/CareRadarBell';
 import {
   ArrowLeft,
   Edit,
@@ -53,19 +55,33 @@ import {
   Loader2,
   History,
   UserCheck,
+  Shield,
+  Eye,
+  Lock,
 } from 'lucide-react';
 
 export default function ContactProfile() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'overview';
-  const { isAdmin } = useAuth();
+  const { user, isAdmin, isCoordinator, hasPermission } = useAuth();
+  const { refreshRadar } = useCareRadar();
+  const canVoice = isAdmin || hasPermission('useVoiceUpdate');
+  const rawTab = searchParams.get('tab') || 'overview';
+  const validTabs = [
+    'overview',
+    'ai-guidance',
+    'journey',
+    'salah',
+    ...(isCoordinator ? ['self-report', 'admin-obs', 'ai-analysis', 'audit'] : []),
+  ];
+  const activeTab = validTabs.includes(rawTab) ? rawTab : 'overview';
 
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Edit Profile form states
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editArea, setEditArea] = useState('');
@@ -83,6 +99,16 @@ export default function ContactProfile() {
   const [reviewPendingEntry, setReviewPendingEntry] = useState<AiVoiceEntry | null>(null);
   const [refreshingInsights, setRefreshingInsights] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
+
+  // Self-report & Admin Observation monitoring view
+  const [monitoringView, setMonitoringView] = useState<{
+    selfReport: any;
+    adminObservations: Observation[];
+    trackerItems: any[];
+  } | null>(null);
+  const [newObsText, setNewObsText] = useState('');
+  const [newObsCategory, setNewObsCategory] = useState('Admin Observation');
+  const [savingObs, setSavingObs] = useState(false);
 
   // Add Follow-up & Reminder state
   const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false);
@@ -120,9 +146,10 @@ export default function ContactProfile() {
         apiFetch(`/api/contacts/${id}/salah`).then((r) => (r.ok ? r.json() : [])),
         apiFetch(`/api/contacts/${id}/follow-ups`).then((r) => (r.ok ? r.json() : [])),
         apiFetch(`/api/contacts/${id}/insights`).then((r) => (r.ok ? r.json() : null)),
-        isAdmin ? apiFetch(`/api/contacts/${id}/voice-history`).then((r) => (r.ok ? r.json() : [])) : Promise.resolve([]),
+        isCoordinator ? apiFetch(`/api/contacts/${id}/voice-history`).then((r) => (r.ok ? r.json() : [])) : Promise.resolve([]),
+        isCoordinator ? apiFetch(`/api/contacts/${id}/monitoring-view`).then((r) => (r.ok ? r.json() : null)) : Promise.resolve(null),
       ])
-        .then(([salahData, fuData, insData, vhData]) => {
+        .then(([salahData, fuData, insData, vhData, monData]) => {
           setSalahLogs(Array.isArray(salahData) ? salahData : []);
           setFollowUpsList(Array.isArray(fuData) ? fuData : []);
           if (insData) {
@@ -131,6 +158,7 @@ export default function ContactProfile() {
             setCategories(Array.isArray(insData.categories) ? insData.categories : []);
           }
           setVoiceHistory(Array.isArray(vhData) ? vhData : []);
+          setMonitoringView(monData || null);
         })
         .catch(() => {});
     } catch (err: any) {
@@ -143,7 +171,13 @@ export default function ContactProfile() {
 
   useEffect(() => {
     fetchContact();
-  }, [id, isAdmin]);
+  }, [id, isCoordinator]);
+
+  useEffect(() => {
+    if (rawTab === 'edit') {
+      setEditDialogOpen(true);
+    }
+  }, [rawTab]);
 
   const handleLogSalah = async () => {
     await apiFetch(`/api/contacts/${id}/salah`, {
@@ -235,6 +269,30 @@ export default function ContactProfile() {
     fetchContact();
   };
 
+  const handleAddManualObservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !newObsText.trim()) return;
+    try {
+      setSavingObs(true);
+      const res = await apiFetch(`/api/contacts/${id}/observations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          observation: newObsText.trim(),
+          category: newObsCategory.trim() || 'Admin Observation',
+          date: today,
+        }),
+      });
+      if (res.ok) {
+        setNewObsText('');
+        fetchContact();
+        refreshRadar();
+      }
+    } finally {
+      setSavingObs(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-[#8EA39A]">Loading profile...</div>;
   if (error) {
     return (
@@ -281,9 +339,12 @@ export default function ContactProfile() {
             </Link>
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-serif italic tracking-tight text-[#EDF4F0] truncate">
-              {contact.name}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-serif italic tracking-tight text-[#EDF4F0] truncate">
+                {contact.name}
+              </h1>
+              <CareRadarBell contactId={contact.id} />
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-[#8EA39A]">
               {contact.phone && (
                 <span className="flex items-center gap-1.5 font-mono tabular-nums">
@@ -308,7 +369,7 @@ export default function ContactProfile() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {isAdmin && (
+          {canVoice && (
             <Button
               type="button"
               onClick={() => {
@@ -322,7 +383,7 @@ export default function ContactProfile() {
             </Button>
           )}
 
-          <Dialog>
+          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <Edit className="w-4 h-4" />
@@ -359,7 +420,7 @@ export default function ContactProfile() {
             </DialogContent>
           </Dialog>
 
-          {isAdmin && (
+          {(isAdmin || (!!user && contact.createdByAccountId === user.id && contact.id !== user.contactId)) && (
             <Dialog>
               <DialogTrigger asChild>
                 <Button
@@ -385,8 +446,10 @@ export default function ContactProfile() {
                     variant="destructive"
                     className="bg-rose-500 hover:bg-rose-600 text-white"
                     onClick={async () => {
-                      await apiFetch(`/api/contacts/${id}`, { method: 'DELETE' });
-                      window.location.href = '/contacts';
+                      const res = await apiFetch(`/api/contacts/${id}`, { method: 'DELETE' });
+                      if (res.ok) {
+                        window.location.href = '/contacts';
+                      }
                     }}
                   >
                     Delete
@@ -402,10 +465,13 @@ export default function ContactProfile() {
       <Tabs value={activeTab} onValueChange={(val) => setSearchParams({ tab: val })} className="w-full">
         <TabsList className="mb-6 flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview & Follow-ups</TabsTrigger>
+          {isCoordinator && <TabsTrigger value="self-report">Self Report</TabsTrigger>}
+          {isCoordinator && <TabsTrigger value="admin-obs">Admin Observation</TabsTrigger>}
+          {isCoordinator && <TabsTrigger value="ai-analysis">AI Analysis</TabsTrigger>}
           <TabsTrigger value="ai-guidance">AI Gap & Guidance</TabsTrigger>
           <TabsTrigger value="journey">Growth Journey</TabsTrigger>
           <TabsTrigger value="salah">Salah Tracking</TabsTrigger>
-          {isAdmin && <TabsTrigger value="audit">Voice Audit Log</TabsTrigger>}
+          {isCoordinator && <TabsTrigger value="audit">Voice Audit Log</TabsTrigger>}
         </TabsList>
 
         {/* OVERVIEW & FOLLOW-UPS TAB */}
@@ -505,7 +571,7 @@ export default function ContactProfile() {
                   <CardTitle className="text-xs uppercase tracking-widest text-[#8EA39A] font-semibold">
                     পর্যবেক্ষিত ইনডিকেটর ও সাম্প্রতিক নোট (Observations)
                   </CardTitle>
-                  {isAdmin && (
+                  {canVoice && (
                     <Button
                       type="button"
                       size="sm"
@@ -570,7 +636,7 @@ export default function ContactProfile() {
                       )}
                     </CardTitle>
                   </div>
-                  {isAdmin && (
+                  {isCoordinator && (
                     <Dialog open={followUpDialogOpen} onOpenChange={setFollowUpDialogOpen}>
                       <DialogTrigger asChild>
                         <Button size="sm" variant="outline" className="gap-1.5 text-xs">
@@ -698,7 +764,7 @@ export default function ContactProfile() {
                             )}
                           </div>
 
-                          {isAdmin && (
+                          {isCoordinator && (
                             <div className="flex items-center gap-1.5 shrink-0">
                               <Button
                                 type="button"
@@ -743,7 +809,7 @@ export default function ContactProfile() {
                 পর্যবেক্ষিত তথ্যের ভিত্তিতে সম্মানজনক ও ধাপে ধাপে অগ্রগতির পরামর্শ (তথ্য অনুপস্থিত থাকা মানে আমল না করা নয়)।
               </p>
             </div>
-            {isAdmin && (
+            {isCoordinator && (
               <Button
                 type="button"
                 onClick={handleRefreshInsights}
@@ -916,7 +982,7 @@ export default function ContactProfile() {
                   </h4>
                   <p className="text-sm text-[#8EA39A] mt-1">Track spiritual and organizational progression.</p>
                 </div>
-                {isAdmin && (
+                {(isAdmin || (!!user && contact.createdByAccountId === user.id)) && (
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="outline" className="text-xs uppercase tracking-widest">
@@ -1119,8 +1185,283 @@ export default function ContactProfile() {
           </Card>
         </TabsContent>
 
-        {/* VOICE AUDIT HISTORY TAB (ADMIN ONLY) */}
-        {isAdmin && (
+        {/* SELF REPORT TAB (CONSENT-GATED READ-ONLY) */}
+        {isCoordinator && (
+          <TabsContent value="self-report" className="space-y-5">
+            {(() => {
+              const sr = monitoringView?.selfReport;
+              const tItems = monitoringView?.trackerItems || [];
+              const itemLabelMap = new Map(tItems.map((it: any) => [it.key, it.banglaLabel]));
+
+              if (!sr || !sr.hasLinkedAccount) {
+                return (
+                  <Card>
+                    <CardContent className="py-10 text-center text-xs text-[#8EA39A]">
+                      এই সদস্যের সাথে এখনো কোনো লগইন অ্যাকাউন্ট সংযুক্ত নেই।
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              if (!sr.monitoringEnabled && !sr.previouslySharedOnly) {
+                return (
+                  <Card>
+                    <CardContent className="py-10 text-center space-y-2.5">
+                      <Lock className="w-7 h-7 text-[#8EA39A] mx-auto" />
+                      <div className="text-sm font-semibold text-[#EDF4F0]">
+                        সদস্যের মনিটরিং বর্তমানে বন্ধ আছে
+                      </div>
+                      <p className="text-xs text-[#8EA39A] max-w-md mx-auto">
+                        সদস্য নিজে থেকে মনিটরিং শেয়ারিং চালু না করা পর্যন্ত তার কোনো Self Report, দাওয়াহ লগ বা ব্যক্তিগত নোট এখানে দেখানো হয় না।
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  {sr.previouslySharedOnly && !sr.monitoringEnabled && (
+                    <div className="p-4 rounded-2xl glass-hot text-xs text-[#E8CD92] flex items-center gap-2">
+                      <Shield className="w-4 h-4 shrink-0" />
+                      <span>
+                        এই রিপোর্টগুলো আগে শেয়ার করা হয়েছিল। বর্তমানে সদস্য মনিটরিং বন্ধ রেখেছেন, তাই নতুন কোনো রিপোর্ট দেখানো হচ্ছে না।
+                      </span>
+                    </div>
+                  )}
+
+                  {sr.weeklySummary && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div className="glass rounded-[20px] p-4">
+                        <div className="text-xs text-[#8EA39A]">গত ৭ দিনে রিপোর্ট</div>
+                        <div className="text-2xl font-serif italic text-[#34D399] mt-1 tabular-nums">
+                          {sr.weeklySummary.daysReported} দিন
+                        </div>
+                      </div>
+                      <div className="glass rounded-[20px] p-4">
+                        <div className="text-xs text-[#8EA39A]">সাপ্তাহিক সম্পূর্ণতা</div>
+                        <div className="text-2xl font-serif italic text-[#B6F5D8] mt-1 tabular-nums">
+                          {sr.weeklySummary.completionPct}%
+                        </div>
+                      </div>
+                      <div className="glass rounded-[20px] p-4">
+                        <div className="text-xs text-[#8EA39A]">সর্বশেষ রিপোর্ট</div>
+                        <div className="text-lg font-mono text-[#EDF4F0] mt-1 tabular-nums">
+                          {sr.weeklySummary.lastReportDate || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <Card>
+                    <CardHeader className="border-b border-white/10 pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-[#34D399]" />
+                        সদস্যের দৈনিক Self Report (শুধুমাত্র দেখার জন্য)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-3">
+                      {(sr.dailyReports || []).length === 0 ? (
+                        <p className="text-xs text-[#8EA39A] text-center py-6">
+                          এই বিভাগে শেয়ারকৃত কোনো দৈনিক রিপোর্ট নেই।
+                        </p>
+                      ) : (
+                        sr.dailyReports.map((rep: any) => {
+                          const checkedLabels = Object.entries(rep.items || {})
+                            .filter(([, v]) => Boolean(v))
+                            .map(([k]) => itemLabelMap.get(k) || k);
+                          return (
+                            <div key={rep.id} className="p-4 rounded-2xl glass-2 space-y-2">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-mono text-[#34D399] tabular-nums">{rep.reportDate}</span>
+                                <span className="text-[#B6F5D8] font-mono tabular-nums">
+                                  সম্পন্ন: {checkedLabels.length}টি
+                                </span>
+                              </div>
+                              {checkedLabels.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {checkedLabels.map((lbl, idx) => (
+                                    <span key={idx} className="px-2 py-0.5 rounded-full bg-[#34D399]/12 text-[#B6F5D8] text-[11px]">
+                                      ✓ {lbl}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {rep.note && (
+                                <p className="text-xs text-[#EDF4F0]/80 italic pt-1">“{rep.note}”</p>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {(sr.dawahLogs || []).length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">শেয়ারকৃত দাওয়াহ কার্যক্রম</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {sr.dawahLogs.map((dl: any) => (
+                          <div key={dl.id} className="p-3 rounded-xl glass-2 text-xs">
+                            <span className="font-mono text-[#34D399]">{dl.date}</span> · {dl.description}
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {(sr.personalNotes || []).length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">শেয়ারকৃত ব্যক্তিগত নোট</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {sr.personalNotes.map((pn: any) => (
+                          <div key={pn.id} className="p-3 rounded-xl glass-2 text-xs">
+                            <span className="font-mono text-[#34D399]">{pn.date}</span> · {pn.body}
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              );
+            })()}
+          </TabsContent>
+        )}
+
+        {/* ADMIN OBSERVATION TAB */}
+        {isCoordinator && (
+          <TabsContent value="admin-obs" className="space-y-5">
+            <Card>
+              <CardHeader className="border-b border-white/10 pb-3 flex flex-row items-center justify-between gap-2">
+                <CardTitle className="text-sm">অ্যাডমিন / দায়িত্বশীলের পর্যবেক্ষণ যোগ করুন</CardTitle>
+                {canVoice && (
+                  <Button type="button" size="sm" onClick={() => setVoiceModalOpen(true)} className="gap-1.5 text-xs">
+                    <Mic className="w-3.5 h-3.5" />
+                    ভয়েস নোট
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="pt-4">
+                <form onSubmit={handleAddManualObservation} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Input
+                      value={newObsCategory}
+                      onChange={(e) => setNewObsCategory(e.target.value)}
+                      placeholder="ক্যাটাগরি (যেমন: মসজিদ সংযোগ)"
+                    />
+                    <Input
+                      value={newObsText}
+                      onChange={(e) => setNewObsText(e.target.value)}
+                      placeholder="মাঠ পর্যায়ের পর্যবেক্ষণ লিখুন..."
+                      className="sm:col-span-2"
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={savingObs} size="sm" className="text-xs">
+                      {savingObs ? 'সংরক্ষণ হচ্ছে...' : 'পর্যবেক্ষণ সংরক্ষণ করুন'}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  সকল Admin ও Voice পর্যবেক্ষণ ({(monitoringView?.adminObservations || observationsList).length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2.5">
+                {(monitoringView?.adminObservations || observationsList).length === 0 ? (
+                  <p className="text-xs text-[#8EA39A] text-center py-6">কোনো পর্যবেক্ষণ রেকর্ড নেই।</p>
+                ) : (
+                  (monitoringView?.adminObservations || observationsList).map((obs) => (
+                    <div key={obs.id} className="p-3.5 rounded-2xl glass-2 flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span
+                            className={`px-2 py-0.5 rounded-full border ${
+                              obs.source === 'voice'
+                                ? 'bg-[#34D399]/15 border-[#34D399]/35 text-[#B6F5D8]'
+                                : 'bg-[#F4A85E]/15 border-[#F4A85E]/35 text-[#F4A85E]'
+                            }`}
+                          >
+                            {obs.source === 'voice' ? 'Voice Update' : 'Admin'}
+                          </span>
+                          <span className="text-[#8EA39A]">{obs.category}</span>
+                        </div>
+                        <p className="text-xs text-[#EDF4F0]/90 leading-relaxed">{obs.observation}</p>
+                      </div>
+                      <span className="text-[11px] font-mono text-[#5D726A] shrink-0 tabular-nums">{obs.date}</span>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* AI ANALYSIS (NEUTRAL COMPARISON) TAB */}
+        {isCoordinator && (
+          <TabsContent value="ai-analysis" className="space-y-5">
+            <div className="p-4 rounded-2xl bg-[#34D399]/10 border border-[#34D399]/25 text-xs text-[#B6F5D8]">
+              এখানে কোনো অভিযোগ ছাড়াই সদস্যের Self Report ও মাঠ পর্যায়ের Admin Observation পাশাপাশি দেখানো হয়েছে — যাতে আন্তরিকতা ও হিকমাহর সাথে পরবর্তী কেয়ার প্ল্যান নেওয়া যায়।
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="border-b border-white/10 pb-3">
+                  <CardTitle className="text-sm text-[#34D399]">সদস্যের Self Report (সম্মতি-ভিত্তিক)</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4 text-xs space-y-2">
+                  {!monitoringView?.selfReport?.monitoringEnabled ? (
+                    <p className="text-[#8EA39A]">মনিটরিং বন্ধ আছে — বর্তমান Self Report প্রদর্শিত হচ্ছে না।</p>
+                  ) : (
+                    <>
+                      <p className="text-[#EDF4F0]">
+                        সাপ্তাহিক রিপোর্ট: {monitoringView.selfReport.weeklySummary?.daysReported ?? 0} দিন · সম্পূর্ণতা:{' '}
+                        {monitoringView.selfReport.weeklySummary?.completionPct ?? 0}%
+                      </p>
+                      <p className="text-[#8EA39A]">
+                        মোট জমাকৃত দৈনিক রিপোর্ট: {(monitoringView.selfReport.dailyReports || []).length}টি
+                      </p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="border-b border-white/10 pb-3">
+                  <CardTitle className="text-sm text-[#F4A85E]">মাঠ পর্যায়ের Admin Observation</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4 text-xs space-y-2">
+                  <p className="text-[#EDF4F0]">
+                    মোট পর্যবেক্ষণ: {(monitoringView?.adminObservations || observationsList).length}টি · গ্রোথ স্টেজ:{' '}
+                    {contact.currentStage}/16
+                  </p>
+                  {(monitoringView?.adminObservations || observationsList).slice(0, 2).map((o) => (
+                    <p key={o.id} className="text-[#8EA39A] truncate">• {o.observation}</p>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" onClick={() => setSearchParams({ tab: 'ai-guidance' })} className="gap-2 text-xs">
+                <Sparkles className="w-4 h-4 text-[#34D399]" />
+                সম্পূর্ণ AI Gap & Guidance ট্যাব দেখুন
+              </Button>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* VOICE AUDIT HISTORY TAB (ADMIN & RESPONSIBLE) */}
+        {isCoordinator && (
           <TabsContent value="audit" className="space-y-4">
             <Card>
               <CardHeader className="border-b border-white/[0.08] pb-4">
@@ -1192,7 +1533,7 @@ export default function ContactProfile() {
       </Tabs>
 
       {/* Voice Dawah Modal */}
-      {isAdmin && (
+      {canVoice && (
         <VoiceDawahModal
           open={voiceModalOpen}
           onOpenChange={setVoiceModalOpen}
@@ -1208,6 +1549,7 @@ export default function ContactProfile() {
           onApproved={() => {
             setReviewPendingEntry(null);
             fetchContact();
+            refreshRadar();
           }}
         />
       )}

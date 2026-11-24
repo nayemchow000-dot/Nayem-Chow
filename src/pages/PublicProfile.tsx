@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { STAGES } from '../types';
 import { apiFetch } from '../lib/api';
+import { BrandLogo } from '../components/BrandLogo';
 
 export default function PublicProfile() {
   const { slug } = useParams<{ slug: string }>();
@@ -38,7 +39,6 @@ export default function PublicProfile() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-[#8EA39A] relative overflow-hidden">
-        <div className="fixed inset-0 pointer-events-none forest-noise" />
         <div className="flex items-center gap-3 glass px-5 py-3 rounded-2xl relative z-10">
           <div className="w-5 h-5 border-2 border-[#34D399] border-t-transparent rounded-full animate-spin" />
           <span>প্রোফাইল লোড হচ্ছে...</span>
@@ -50,7 +50,6 @@ export default function PublicProfile() {
   if (notFound || !profile) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center relative overflow-hidden">
-        <div className="fixed inset-0 pointer-events-none forest-noise" />
         <div className="max-w-md w-full glass rounded-[24px] p-8 relative z-10 flex flex-col items-center">
           <div className="w-16 h-16 rounded-2xl glass-2 flex items-center justify-center text-[#8EA39A] mb-4">
             <Lock className="w-8 h-8" />
@@ -75,7 +74,6 @@ export default function PublicProfile() {
   if (!profile.isPublic) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center relative overflow-hidden">
-        <div className="fixed inset-0 pointer-events-none forest-noise" />
         <div className="absolute top-1/4 w-96 h-96 bg-[#34D399]/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-md w-full glass rounded-[24px] p-8 relative z-10">
@@ -111,16 +109,13 @@ export default function PublicProfile() {
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-28 -left-24 w-[420px] h-[420px] rounded-full bg-[#34D399]/12 blur-[110px]" />
         <div className="absolute -bottom-24 right-0 w-[360px] h-[360px] rounded-full bg-[#DD7B3C]/10 blur-[110px]" />
-        <div className="absolute inset-0 forest-noise" />
       </div>
 
       <div className="max-w-3xl mx-auto space-y-6 relative z-10">
         {/* Top Navbar */}
         <div className="flex items-center justify-between pb-4 border-b border-white/[0.08]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#34D399]/15 border border-[#34D399]/35 flex items-center justify-center text-[#34D399]">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
+            <BrandLogo size="sm" />
             <div>
               <div className="text-xs font-bold text-[#EDF4F0]">কোটবাড়ি দাওয়াহ মুভমেন্ট</div>
               <div className="text-[10px] text-[#8EA39A]">ভেরিফাইড মেম্বার প্রোফাইল</div>

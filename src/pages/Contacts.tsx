@@ -1,34 +1,48 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui';
 import { Contact, STAGES } from '../types';
-import { Search, UserPlus, Filter, Trash2, Mic } from 'lucide-react';
+import { Search, UserPlus, Trash2, Mic, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useCareRadar } from '../contexts/CareRadarContext';
 import VoiceDawahModal from '../components/VoiceDawahModal';
+import CareRadarBell from '../components/CareRadarBell';
 
 export default function Contacts() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin, isCoordinator, hasPermission } = useAuth();
+  const { enabled: careEnabled, summaries: careSummaries, refreshRadar } = useCareRadar();
+  const canVoice = isAdmin || hasPermission('useVoiceUpdate');
   const [voiceMember, setVoiceMember] = useState<Contact | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [savingAdd, setSavingAdd] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newArea, setNewArea] = useState('');
   const [newPriority, setNewPriority] = useState('growing');
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchContacts = async () => {
     try {
       setLoading(true);
       setError(null);
       const res = await apiFetch('/api/contacts');
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'API request failed');
+      }
       const data = await res.json();
       if (Array.isArray(data)) {
         setContacts(data);
@@ -37,7 +51,7 @@ export default function Contacts() {
       }
     } catch (err: any) {
       console.error("Error loading contacts:", err);
-      setError("Unable to load members. Please check your database connection.");
+      setError(err?.message || "Unable to load members. Please check your database connection.");
       setContacts([]);
     } finally {
       setLoading(false);
@@ -49,41 +63,102 @@ export default function Contacts() {
     fetchContacts();
   }, []);
 
-  const handleAddBrother = async () => {
-    if (!newName.trim()) return;
-    
-    await apiFetch('/api/contacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newName,
-        phone: newPhone,
-        area: newArea,
-        priorityLevel: newPriority,
-        firstContactDate: new Date().toISOString().split('T')[0]
-      })
-    });
-    
-    setNewName('');
-    setNewPhone('');
-    setNewArea('');
-    setNewPriority('growing');
-    fetchContacts();
+  const canDeleteContact = (c: Contact) => {
+    return isAdmin || (!!user && c.createdByAccountId === user.id && c.id !== user.contactId);
+  };
+
+  const handleAddBrother = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newName.trim()) {
+      setAddError('অনুগ্রহ করে ভাইয়ের নাম লিখুন।');
+      return;
+    }
+
+    try {
+      setSavingAdd(true);
+      setAddError(null);
+      const res = await apiFetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newName.trim(),
+          phone: newPhone.trim(),
+          area: newArea.trim(),
+          priorityLevel: newPriority,
+          firstContactDate: new Date().toISOString().split('T')[0]
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAddError(data.error || 'নতুন ভাই সংরক্ষণ করতে সমস্যা হয়েছে।');
+        return;
+      }
+
+      setNewName('');
+      setNewPhone('');
+      setNewArea('');
+      setNewPriority('growing');
+      setAddDialogOpen(false);
+      await fetchContacts();
+    } catch (err: any) {
+      console.error("Error adding brother:", err);
+      setAddError(err?.message || 'সার্ভারে সংরক্ষণ করতে ব্যর্থ হয়েছে।');
+    } finally {
+      setSavingAdd(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await apiFetch(`/api/contacts/${id}`, {
-      method: 'DELETE'
-    });
-    setContactToDelete(null);
-    fetchContacts();
+    try {
+      setDeleting(true);
+      setActionError(null);
+      const res = await apiFetch(`/api/contacts/${id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error || 'মেম্বার ডিলিট করা যায়নি।');
+        setContactToDelete(null);
+        return;
+      }
+      setContactToDelete(null);
+      await fetchContacts();
+    } catch (err: any) {
+      setActionError(err?.message || 'ডিলিট করতে সমস্যা হয়েছে।');
+      setContactToDelete(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const filtered = contacts.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.area?.toLowerCase().includes(search.toLowerCase());
-    const matchesPriority = filterPriority === 'all' || c.priorityLevel === filterPriority;
-    return matchesSearch && matchesPriority;
-  });
+  const filtered = contacts
+    .filter(c => {
+      const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.area?.toLowerCase().includes(search.toLowerCase());
+      if (!matchesSearch) return false;
+      if (filterPriority === 'needs_care') {
+        const u = careSummaries[c.id]?.urgency;
+        return u === 'urgent' || u === 'soon';
+      }
+      return filterPriority === 'all' || c.priorityLevel === filterPriority;
+    })
+    .sort((a, b) => {
+      if (filterPriority === 'needs_care') {
+        const rank: Record<string, number> = { urgent: 3, soon: 2, ok: 1 };
+        const ra = rank[careSummaries[a.id]?.urgency || 'ok'] || 1;
+        const rb = rank[careSummaries[b.id]?.urgency || 'ok'] || 1;
+        if (ra !== rb) return rb - ra;
+      }
+      return 0;
+    });
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterPriority]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const PriorityBadge = ({ level }: { level: string }) => {
     const props = {
@@ -106,7 +181,13 @@ export default function Contacts() {
           <p className="text-[#8EA39A] mt-1 text-sm">Track and manage growth journeys.</p>
         </div>
 
-        <Dialog>
+        <Dialog
+          open={addDialogOpen}
+          onOpenChange={(open) => {
+            setAddDialogOpen(open);
+            if (!open) setAddError(null);
+          }}
+        >
           <DialogTrigger asChild>
             <Button className="gap-2 rounded-xl">
               <UserPlus className="w-4 h-4" />
@@ -118,13 +199,19 @@ export default function Contacts() {
               <DialogTitle>Add New Brother</DialogTitle>
               <DialogDescription>Add a new contact to your Dawah list.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <form onSubmit={handleAddBrother} className="space-y-4 py-2">
+              {addError && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-400/35 text-rose-200 text-xs">
+                  {addError}
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-xs text-[#8EA39A]">Name</label>
                 <Input
                   placeholder="e.g. Abdullah"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -156,18 +243,31 @@ export default function Contacts() {
                   <option value="high_priority" className="bg-[#0A1210]">High Priority</option>
                 </select>
               </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <DialogClose asChild>
-                <Button variant="ghost">Cancel</Button>
-              </DialogClose>
-              <DialogClose asChild>
-                <Button onClick={handleAddBrother}>Save</Button>
-              </DialogClose>
-            </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="ghost" onClick={() => setAddDialogOpen(false)} disabled={savingAdd}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={savingAdd}>
+                  {savingAdd ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
+
+      {actionError && (
+        <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-400/35 text-rose-200 text-xs flex items-center justify-between gap-3">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-rose-200/80 hover:text-rose-100 underline underline-offset-2 shrink-0"
+          >
+            বন্ধ করুন
+          </button>
+        </div>
+      )}
 
       <Card className="overflow-hidden">
         <CardContent className="p-0">
@@ -188,6 +288,9 @@ export default function Contacts() {
                 onChange={(e) => setFilterPriority(e.target.value)}
               >
                 <option value="all" className="bg-[#0A1210]">All Priorities</option>
+                {isCoordinator && careEnabled && (
+                  <option value="needs_care" className="bg-[#0A1210]">Care Radar (কেয়ার প্রয়োজন)</option>
+                )}
                 <option value="high_priority" className="bg-[#0A1210]">High Priority</option>
                 <option value="needs_attention" className="bg-[#0A1210]">Needs Attention</option>
                 <option value="growing" className="bg-[#0A1210]">Growing</option>
@@ -222,12 +325,15 @@ export default function Contacts() {
                     <td colSpan={6} className="px-6 py-8 text-center text-[#8EA39A]">কোনো মেম্বার পাওয়া যায়নি।</td>
                   </tr>
                 ) : (
-                  filtered.map(contact => (
+                  paginated.map(contact => (
                     <tr key={contact.id} className="hover:bg-white/[0.04] transition-colors group">
                       <td className="px-5 py-4">
-                        <Link to={`/contacts/${contact.id}`} className="font-semibold text-[#EDF4F0] hover:text-[#B6F5D8] transition-colors block">
-                          {contact.name}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link to={`/contacts/${contact.id}`} className="font-semibold text-[#EDF4F0] hover:text-[#B6F5D8] transition-colors">
+                            {contact.name}
+                          </Link>
+                          <CareRadarBell contactId={contact.id} compact />
+                        </div>
                         <div className="text-[#8EA39A] text-[11px] mt-0.5 font-mono tabular-nums">
                           যুক্ত: {contact.firstContactDate || '২০২৬'}
                         </div>
@@ -257,7 +363,8 @@ export default function Contacts() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {isAdmin && (
+                          <CareRadarBell contactId={contact.id} />
+                          {canVoice && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -301,15 +408,17 @@ export default function Contacts() {
                           >
                             Edit
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-rose-300/70 hover:text-rose-200 hover:bg-rose-500/15 rounded-lg ml-1"
-                            onClick={() => setContactToDelete(contact.id)}
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {canDeleteContact(contact) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-rose-300/70 hover:text-rose-200 hover:bg-rose-500/15 rounded-lg ml-1"
+                              onClick={() => setContactToDelete(contact.id)}
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -327,14 +436,17 @@ export default function Contacts() {
             ) : filtered.length === 0 ? (
               <div className="p-8 text-center text-[#8EA39A]">কোনো মেম্বার পাওয়া যায়নি।</div>
             ) : (
-              filtered.map(contact => (
+              paginated.map(contact => (
                 <div
                   key={contact.id}
                   className="p-4 flex flex-col gap-3"
                 >
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start gap-2">
                     <div>
-                      <div className="font-semibold text-[#EDF4F0] text-base">{contact.name}</div>
+                      <div className="font-semibold text-[#EDF4F0] text-base flex items-center gap-2">
+                        <span>{contact.name}</span>
+                        <CareRadarBell contactId={contact.id} compact />
+                      </div>
                       <div className="text-[#34D399] text-xs font-mono mt-0.5">{contact.phone || 'ফোন নেই'} • {contact.area || 'এলাকা নেই'}</div>
                     </div>
                     <PriorityBadge level={contact.priorityLevel} />
@@ -354,7 +466,7 @@ export default function Contacts() {
                   </div>
 
                   {/* Mobile Action Buttons */}
-                  <div className={`grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 pt-1`}>
+                  <div className={`grid ${canVoice ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 pt-1`}>
                     <button
                       type="button"
                       className="py-1.5 px-2 text-[11px] font-medium glass-2 hover:border-[#34D399]/35 rounded-xl text-[#EDF4F0] text-center"
@@ -383,7 +495,7 @@ export default function Contacts() {
                     >
                       Edit
                     </button>
-                    {isAdmin && (
+                    {canVoice && (
                       <button
                         type="button"
                         className="py-1.5 px-2 text-[11px] font-medium bg-[#34D399]/15 border border-[#34D399]/35 hover:bg-[#34D399]/25 rounded-xl text-[#B6F5D8] text-center inline-flex items-center justify-center gap-1"
@@ -400,6 +512,38 @@ export default function Contacts() {
             )}
           </div>
 
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-white/10 flex items-center justify-between text-xs text-[#8EA39A]">
+              <span className="tabular-nums">
+                মোট {filtered.length} জন · পৃষ্ঠা {safePage} / {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="h-8 px-2.5 gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  আগের
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="h-8 px-2.5 gap-1"
+                >
+                  পরের
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
         </CardContent>
       </Card>
 
@@ -412,13 +556,15 @@ export default function Contacts() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 mt-4">
-            <Button variant="ghost" onClick={() => setContactToDelete(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => contactToDelete && handleDelete(contactToDelete)}>Delete</Button>
+            <Button variant="ghost" onClick={() => setContactToDelete(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="destructive" onClick={() => contactToDelete && handleDelete(contactToDelete)} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {isAdmin && voiceMember && (
+      {canVoice && voiceMember && (
         <VoiceDawahModal
           open={!!voiceMember}
           onOpenChange={(open) => {
@@ -434,6 +580,7 @@ export default function Contacts() {
           onApproved={() => {
             setVoiceMember(null);
             fetchContacts();
+            refreshRadar();
           }}
         />
       )}

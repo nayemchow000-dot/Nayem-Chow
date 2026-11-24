@@ -1,42 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  Users, Shield, ShieldCheck, Key, Lock, Globe, 
-  Search, Plus, Check, Trash2, Edit3, ExternalLink, RefreshCw, AlertCircle 
+import {
+  ShieldCheck, Lock, Globe,
+  Search, Plus, Trash2, Edit3, ExternalLink, RefreshCw, Users
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { Contact, MemberPermissions, UserRole } from '../types';
 
 export default function AdminAccounts() {
-  const { token, isAdmin } = useAuth();
+  const { token } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
+  const [contactsList, setContactsList] = useState<Contact[]>([]);
+  const [assignments, setAssignments] = useState<Array<{ responsibleAccountId: string; contactId: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterRole, setFilterRole] = useState<'all' | 'admin' | 'member'>('all');
+  const [filterRole, setFilterRole] = useState<'all' | UserRole>('all');
 
   // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'admin' | 'member'>('member');
+  const [newRole, setNewRole] = useState<UserRole>('member');
+  const [newPerms, setNewPerms] = useState<MemberPermissions>({
+    viewAssignedMembers: true,
+    logDawahForOthers: true,
+    useVoiceUpdate: true,
+  });
   const [createError, setCreateError] = useState('');
 
   // Edit modal
   const [editingAcc, setEditingAcc] = useState<any | null>(null);
   const [editPassword, setEditPassword] = useState('');
-  const [editRole, setEditRole] = useState<'admin' | 'member'>('member');
+  const [editRole, setEditRole] = useState<UserRole>('member');
+  const [editPerms, setEditPerms] = useState<MemberPermissions>({
+    viewAssignedMembers: true,
+    logDawahForOthers: false,
+    useVoiceUpdate: false,
+  });
+  const [editAssignedIds, setEditAssignedIds] = useState<Set<string>>(new Set());
+  const [assignSearch, setAssignSearch] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
   const [editIsPublic, setEditIsPublic] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
 
-  const fetchAccounts = async () => {
+  const fetchAll = async () => {
     if (!token) return;
     try {
       setLoading(true);
-      const res = await apiFetch('/api/admin/accounts');
-      if (res.ok) {
-        const data = await res.json();
-        setAccounts(data);
-      }
+      const [accRes, contRes, asgRes] = await Promise.all([
+        apiFetch('/api/admin/accounts'),
+        apiFetch('/api/contacts'),
+        apiFetch('/api/admin/assignments'),
+      ]);
+      if (accRes.ok) setAccounts(await accRes.json());
+      if (contRes.ok) setContactsList(await contRes.json());
+      if (asgRes.ok) setAssignments(await asgRes.json());
     } catch (e) {
       console.error(e);
     } finally {
@@ -45,7 +63,7 @@ export default function AdminAccounts() {
   };
 
   useEffect(() => {
-    fetchAccounts();
+    fetchAll();
   }, [token]);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -59,13 +77,12 @@ export default function AdminAccounts() {
     try {
       const res = await apiFetch('/api/admin/accounts', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: newUsername,
           password: newPassword,
           role: newRole,
+          permissions: newRole === 'responsible' ? newPerms : {},
         })
       });
 
@@ -74,11 +91,12 @@ export default function AdminAccounts() {
         setShowCreateModal(false);
         setNewUsername('');
         setNewPassword('');
-        fetchAccounts();
+        setNewRole('member');
+        fetchAll();
       } else {
         setCreateError(data.error || 'তৈরি করতে সমস্যা হয়েছে।');
       }
-    } catch (err) {
+    } catch {
       setCreateError('সার্ভার সমস্যা।');
     }
   };
@@ -90,6 +108,7 @@ export default function AdminAccounts() {
     try {
       const updatePayload: any = {
         role: editRole,
+        permissions: editRole === 'responsible' ? editPerms : {},
         isActive: editIsActive,
         isPublic: editIsPublic,
       };
@@ -99,16 +118,21 @@ export default function AdminAccounts() {
 
       const res = await apiFetch(`/api/admin/accounts/${editingAcc.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatePayload)
       });
 
       if (res.ok) {
+        if (editRole === 'responsible') {
+          await apiFetch(`/api/admin/accounts/${editingAcc.id}/assignments`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contactIds: Array.from(editAssignedIds) }),
+          });
+        }
         setEditingAcc(null);
         setEditPassword('');
-        fetchAccounts();
+        fetchAll();
       }
     } catch (e) {
       console.error(e);
@@ -121,9 +145,7 @@ export default function AdminAccounts() {
     if (!window.confirm(`আপনি কি নিশ্চিত যে অ্যাকাউন্ট "${username}" ডিলিট করবেন?`)) return;
 
     try {
-      const res = await apiFetch(`/api/admin/accounts/${id}`, {
-        method: 'DELETE',
-      });
+      const res = await apiFetch(`/api/admin/accounts/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setAccounts(prev => prev.filter(a => a.id !== id));
       }
@@ -143,7 +165,13 @@ export default function AdminAccounts() {
   });
 
   const totalAdmins = accounts.filter(a => a.role === 'admin').length;
+  const totalResponsibles = accounts.filter(a => a.role === 'responsible').length;
   const totalPublic = accounts.filter(a => a.isPublic).length;
+
+  const assignedCountByAcc = new Map<string, number>();
+  for (const a of assignments) {
+    assignedCountByAcc.set(a.responsibleAccountId, (assignedCountByAcc.get(a.responsibleAccountId) || 0) + 1);
+  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -153,10 +181,10 @@ export default function AdminAccounts() {
           <span className="eyebrow">ACCOUNT GOVERNANCE</span>
           <h1 className="text-2xl sm:text-3xl font-serif italic text-[#EDF4F0] flex items-center gap-2.5 mt-1">
             <ShieldCheck className="w-6 h-6 text-[#34D399]" />
-            মেম্বার অ্যাকাউন্ট ও সিকিউরিটি ম্যানেজমেন্ট
+            মেম্বার অ্যাকাউন্ট, দায়িত্বশীল ও সিকিউরিটি
           </h1>
           <p className="text-xs sm:text-sm text-[#8EA39A] mt-1">
-            সকল দাওয়াহ সদস্যের অ্যাকাউন্ট, পাসওয়ার্ড রিসেট, রোল ও প্রাইভেসি নিয়ন্ত্রণ করুন
+            সদস্যের অ্যাকাউন্ট, দায়িত্বশীল রোল, পারমিশন এবং নির্দিষ্ট সদস্য নির্ধারণ করুন
           </p>
         </div>
 
@@ -173,7 +201,7 @@ export default function AdminAccounts() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="glass rounded-[20px] p-4">
-          <div className="text-xs text-[#8EA39A]">মোট মেম্বার অ্যাকাউন্ট</div>
+          <div className="text-xs text-[#8EA39A]">মোট অ্যাকাউন্ট</div>
           <div className="text-2xl font-serif italic text-[#EDF4F0] mt-1 tabular-nums">{accounts.length}</div>
         </div>
         <div className="glass rounded-[20px] p-4">
@@ -181,11 +209,11 @@ export default function AdminAccounts() {
           <div className="text-2xl font-serif italic text-[#34D399] mt-1 tabular-nums">{totalAdmins}</div>
         </div>
         <div className="glass rounded-[20px] p-4">
-          <div className="text-xs text-[#8EA39A]">সাধারণ মেম্বার</div>
-          <div className="text-2xl font-serif italic text-[#E8CD92] mt-1 tabular-nums">{accounts.length - totalAdmins}</div>
+          <div className="text-xs text-[#8EA39A]">দায়িত্বশীল (Responsible)</div>
+          <div className="text-2xl font-serif italic text-[#F4A85E] mt-1 tabular-nums">{totalResponsibles}</div>
         </div>
         <div className="glass rounded-[20px] p-4">
-          <div className="text-xs text-[#8EA39A]">পাবলিক প্রোফাইল সক্রিয়</div>
+          <div className="text-xs text-[#8EA39A]">পাবলিক প্রোফাইল</div>
           <div className="text-2xl font-serif italic text-[#B6F5D8] mt-1 tabular-nums">{totalPublic}</div>
         </div>
       </div>
@@ -203,8 +231,8 @@ export default function AdminAccounts() {
           />
         </div>
 
-        <div className="flex gap-2">
-          {(['all', 'admin', 'member'] as const).map(role => (
+        <div className="flex flex-wrap gap-2">
+          {(['all', 'admin', 'responsible', 'member'] as const).map(role => (
             <button
               key={role}
               type="button"
@@ -215,7 +243,7 @@ export default function AdminAccounts() {
                   : 'glass-2 text-[#8EA39A] hover:text-[#EDF4F0]'
               }`}
             >
-              {role === 'all' ? 'সকল' : role === 'admin' ? 'অ্যাডমিন' : 'মেম্বার'}
+              {role === 'all' ? 'সকল' : role === 'admin' ? 'অ্যাডমিন' : role === 'responsible' ? 'দায়িত্বশীল' : 'মেম্বার'}
             </button>
           ))}
         </div>
@@ -246,99 +274,121 @@ export default function AdminAccounts() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06]">
-                {filtered.map(acc => (
-                  <tr key={acc.id} className="hover:bg-white/[0.03] transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-[#EDF4F0]">
-                        {acc.contact?.name || acc.username}
-                      </div>
-                      <div className="text-[11px] text-[#8EA39A] font-mono">
-                        user: {acc.username}
-                      </div>
-                    </td>
+                {filtered.map(acc => {
+                  const assignedCnt = assignedCountByAcc.get(acc.id) || 0;
+                  return (
+                    <tr key={acc.id} className="hover:bg-white/[0.03] transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-[#EDF4F0]">
+                          {acc.contact?.name || acc.username}
+                        </div>
+                        <div className="text-[11px] text-[#8EA39A] font-mono">
+                          user: {acc.username}
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4">
-                      <div className="text-[#EDF4F0] font-mono tabular-nums">{acc.contact?.phone || '—'}</div>
-                      <div className="text-[11px] text-[#8EA39A]">{acc.contact?.area || '—'}</div>
-                    </td>
+                      <td className="py-3.5 px-4">
+                        <div className="text-[#EDF4F0] font-mono tabular-nums">{acc.contact?.phone || '—'}</div>
+                        <div className="text-[11px] text-[#8EA39A]">{acc.contact?.area || '—'}</div>
+                      </td>
 
-                    <td className="py-3.5 px-4 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-                        acc.role === 'admin'
-                          ? 'bg-[#34D399]/15 text-[#B6F5D8] border border-[#34D399]/35'
-                          : 'bg-white/[0.06] text-[#EDF4F0] border border-white/12'
-                      }`}>
-                        {acc.role === 'admin' ? 'Admin' : 'Member'}
-                      </span>
-                    </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="inline-flex flex-col items-center gap-1">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
+                            acc.role === 'admin'
+                              ? 'bg-[#34D399]/15 text-[#B6F5D8] border border-[#34D399]/35'
+                              : acc.role === 'responsible'
+                              ? 'bg-[#F4A85E]/15 text-[#F4A85E] border border-[#F4A85E]/35'
+                              : 'bg-white/[0.06] text-[#EDF4F0] border border-white/12'
+                          }`}>
+                            {acc.role === 'admin' ? 'Admin' : acc.role === 'responsible' ? 'দায়িত্বশীল' : 'Member'}
+                          </span>
+                          {acc.role === 'responsible' && (
+                            <span className="text-[10px] text-[#8EA39A] font-mono tabular-nums">
+                              {assignedCnt} জন নির্ধারিত
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
-                        acc.isActive
-                          ? 'bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/25'
-                          : 'bg-rose-500/15 text-rose-300 border border-rose-400/30'
-                      }`}>
-                        {acc.isActive ? 'Active' : 'Disabled'}
-                      </span>
-                    </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
+                          acc.isActive
+                            ? 'bg-[#34D399]/12 text-[#34D399] border border-[#34D399]/25'
+                            : 'bg-rose-500/15 text-rose-300 border border-rose-400/30'
+                        }`}>
+                          {acc.isActive ? 'Active' : 'Disabled'}
+                        </span>
+                      </td>
 
-                    <td className="py-3.5 px-4 text-center">
-                      <a
-                        href={`/p/${acc.shareSlug || acc.username}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full transition-colors ${
-                          acc.isPublic
-                            ? 'bg-[#34D399]/12 text-[#B6F5D8] hover:bg-[#34D399]/22 border border-[#34D399]/25'
-                            : 'bg-white/[0.05] text-[#8EA39A] hover:text-[#EDF4F0] border border-white/10'
-                        }`}
-                      >
-                        {acc.isPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                        <span>{acc.isPublic ? 'Public' : 'Private'}</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingAcc(acc);
-                            setEditRole(acc.role);
-                            setEditIsActive(acc.isActive);
-                            setEditIsPublic(acc.isPublic);
-                            setEditPassword('');
-                          }}
-                          className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-[#8EA39A] hover:text-[#EDF4F0] transition-colors"
-                          title="সম্পাদনা ও পাসওয়ার্ড রিসেট"
+                      <td className="py-3.5 px-4 text-center">
+                        <a
+                          href={`/p/${acc.shareSlug || acc.username}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full transition-colors ${
+                            acc.isPublic
+                              ? 'bg-[#34D399]/12 text-[#B6F5D8] hover:bg-[#34D399]/22 border border-[#34D399]/25'
+                              : 'bg-white/[0.05] text-[#8EA39A] hover:text-[#EDF4F0] border border-white/10'
+                          }`}
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        {acc.username !== 'admin' && (
+                          {acc.isPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                          <span>{acc.isPublic ? 'Public' : 'Private'}</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleDelete(acc.id, acc.username)}
-                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition-colors"
-                            title="অ্যাকাউন্ট মুছুন"
+                            onClick={() => {
+                              setEditingAcc(acc);
+                              setEditRole(acc.role);
+                              setEditPerms({
+                                viewAssignedMembers: acc.permissions?.viewAssignedMembers ?? true,
+                                logDawahForOthers: acc.permissions?.logDawahForOthers ?? false,
+                                useVoiceUpdate: acc.permissions?.useVoiceUpdate ?? false,
+                              });
+                              const assigned = assignments
+                                .filter((asg) => asg.responsibleAccountId === acc.id)
+                                .map((asg) => asg.contactId);
+                              setEditAssignedIds(new Set(assigned));
+                              setAssignSearch('');
+                              setEditIsActive(acc.isActive);
+                              setEditIsPublic(acc.isPublic);
+                              setEditPassword('');
+                            }}
+                            className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-[#8EA39A] hover:text-[#EDF4F0] transition-colors"
+                            title="সম্পাদনা, পারমিশন ও পাসওয়ার্ড রিসেট"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {acc.username !== 'admin' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(acc.id, acc.username)}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition-colors"
+                              title="অ্যাকাউন্ট মুছুন"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Edit / Password Reset Modal */}
+      {/* Edit / Role / Permissions / Assigned Contacts Modal */}
       {editingAcc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm">
-          <div className="glass-modal rounded-[22px] p-6 max-w-md w-full">
+          <div className="glass-modal rounded-[22px] p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
               <h3 className="font-semibold text-[#EDF4F0] flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-[#34D399]" />
@@ -355,32 +405,104 @@ export default function AdminAccounts() {
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="block text-[#8EA39A] mb-1">রোল (Role)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditRole('member')}
-                    className={`py-2 rounded-xl border text-center font-medium transition-colors ${
-                      editRole === 'member'
-                        ? 'bg-[#34D399]/15 text-[#B6F5D8] border-[#34D399]/40'
-                        : 'glass-2 text-[#8EA39A]'
-                    }`}
-                  >
-                    সাধারণ মেম্বার
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditRole('admin')}
-                    className={`py-2 rounded-xl border text-center font-medium transition-colors ${
-                      editRole === 'admin'
-                        ? 'bg-[#34D399]/15 text-[#B6F5D8] border-[#34D399]/40'
-                        : 'glass-2 text-[#8EA39A]'
-                    }`}
-                  >
-                    অ্যাডমিন (Admin)
-                  </button>
+                <label className="block text-[#8EA39A] mb-1.5">রোল (Role)</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { key: 'member', label: 'সাধারণ মেম্বার' },
+                      { key: 'responsible', label: 'দায়িত্বশীল' },
+                      { key: 'admin', label: 'অ্যাডমিন' },
+                    ] as const
+                  ).map((r) => (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => setEditRole(r.key)}
+                      className={`py-2 rounded-xl border text-center font-medium transition-colors ${
+                        editRole === r.key
+                          ? 'bg-[#34D399]/15 text-[#B6F5D8] border-[#34D399]/40'
+                          : 'glass-2 text-[#8EA39A]'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              {editRole === 'responsible' && (
+                <>
+                  <div className="p-3.5 rounded-2xl glass-2 space-y-2.5">
+                    <div className="font-semibold text-[#F4A85E]">দায়িত্বশীল পারমিশন (Permissions)</div>
+                    {[
+                      { key: 'viewAssignedMembers' as const, label: 'নির্ধারিত সদস্যদের দেখতে পারবে' },
+                      { key: 'logDawahForOthers' as const, label: 'অন্যের দাওয়াহ ও ফলো-আপ লগ করতে পারবে' },
+                      { key: 'useVoiceUpdate' as const, label: 'AI ভয়েস নোট আপডেট ব্যবহার করতে পারবে' },
+                    ].map((p) => (
+                      <label key={p.key} className="flex items-center justify-between cursor-pointer">
+                        <span className="text-[#EDF4F0]/90">{p.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editPerms[p.key])}
+                          onChange={(e) => setEditPerms((prev) => ({ ...prev, [p.key]: e.target.checked }))}
+                          className="w-4 h-4 accent-[#34D399]"
+                        />
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl glass-2 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[#B6F5D8] flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" />
+                        নির্ধারিত সদস্য ({editAssignedIds.size} জন)
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={assignSearch}
+                      onChange={(e) => setAssignSearch(e.target.value)}
+                      placeholder="সদস্যের নাম বা এলাকা দিয়ে খুঁজুন..."
+                      className="w-full px-3 py-1.5 forest-input rounded-xl"
+                    />
+                    <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                      {contactsList
+                        .filter(
+                          (c) =>
+                            !assignSearch ||
+                            c.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+                            (c.area || '').toLowerCase().includes(assignSearch.toLowerCase())
+                        )
+                        .map((c) => {
+                          const checked = editAssignedIds.has(c.id);
+                          return (
+                            <label
+                              key={c.id}
+                              className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.04] cursor-pointer"
+                            >
+                              <span className="truncate text-[#EDF4F0]/90">
+                                {c.name} {c.area ? `(${c.area})` : ''}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  setEditAssignedIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(c.id)) next.delete(c.id);
+                                    else next.add(c.id);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 accent-[#34D399] shrink-0"
+                              />
+                            </label>
+                          );
+                        })}
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block text-[#8EA39A] mb-1">
@@ -490,13 +612,35 @@ export default function AdminAccounts() {
                 <label className="block text-[#8EA39A] mb-1">রোল (Role)</label>
                 <select
                   value={newRole}
-                  onChange={e => setNewRole(e.target.value as any)}
+                  onChange={e => setNewRole(e.target.value as UserRole)}
                   className="w-full px-3 py-2 forest-input rounded-xl"
                 >
                   <option value="member" className="bg-[#0A1210]">সাধারণ মেম্বার (Member)</option>
+                  <option value="responsible" className="bg-[#0A1210]">দায়িত্বশীল (Responsible)</option>
                   <option value="admin" className="bg-[#0A1210]">অ্যাডমিন (Admin)</option>
                 </select>
               </div>
+
+              {newRole === 'responsible' && (
+                <div className="p-3 rounded-xl glass-2 space-y-2">
+                  <div className="text-[#F4A85E] font-medium">দায়িত্বশীল পারমিশন</div>
+                  {[
+                    { key: 'viewAssignedMembers' as const, label: 'নির্ধারিত সদস্য দেখতে পারবে' },
+                    { key: 'logDawahForOthers' as const, label: 'অন্যের দাওয়াহ লগ করতে পারবে' },
+                    { key: 'useVoiceUpdate' as const, label: 'ভয়েস নোট আপডেট ব্যবহার করতে পারবে' },
+                  ].map((p) => (
+                    <label key={p.key} className="flex items-center justify-between cursor-pointer">
+                      <span className="text-[#EDF4F0]/85">{p.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(newPerms[p.key])}
+                        onChange={(e) => setNewPerms((prev) => ({ ...prev, [p.key]: e.target.checked }))}
+                        className="w-4 h-4 accent-[#34D399]"
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
 
               <div className="pt-4 flex justify-end gap-2">
                 <button

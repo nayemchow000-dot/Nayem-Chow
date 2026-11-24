@@ -75,6 +75,8 @@ export default function VoiceDawahModal({
   const [applyStage, setApplyStage] = useState<number | ''>('');
   const [applyPriority, setApplyPriority] = useState<Priority | ''>('');
   const [isEditingInReview, setIsEditingInReview] = useState(false);
+  const [selfVsAdminComparison, setSelfVsAdminComparison] = useState<string | null>(null);
+  const [monitoringConsented, setMonitoringConsented] = useState<boolean>(false);
 
   // Reset or load initial pending entry when modal opens
   useEffect(() => {
@@ -114,6 +116,8 @@ export default function VoiceDawahModal({
       setApplyStage('');
       setApplyPriority('');
       setIsEditingInReview(false);
+      setSelfVsAdminComparison(null);
+      setMonitoringConsented(false);
     }
   }, [open, initialPendingEntry]);
 
@@ -237,6 +241,8 @@ export default function VoiceDawahModal({
       );
       setApplyStage(entry.indicatorUpdates?.suggestedStage || '');
       setApplyPriority((entry.indicatorUpdates?.suggestedPriority as Priority) || '');
+      setSelfVsAdminComparison(data.selfVsAdminComparison || null);
+      setMonitoringConsented(Boolean(data.monitoringConsented));
       setStep('review');
     } catch (err: any) {
       setError(err.message || 'AI বিশ্লেষণ করতে সমস্যা হয়েছে।');
@@ -327,6 +333,10 @@ export default function VoiceDawahModal({
           </div>
         )}
 
+        <div className="p-3 rounded-xl bg-[#34D399]/10 border border-[#34D399]/25 text-[#B6F5D8] text-[11px] leading-relaxed">
+          সদস্যের Self Report এবং Admin Observation আলাদা রাখা হয়েছে। অনুমোদনের আগে কোনো তথ্য পরিবর্তন হবে না।
+        </div>
+
         {/* STEP 1 & 2: RECORD & EDIT TRANSCRIPTION */}
         {(step === 'record' || step === 'transcribed') && (
           <div className="space-y-4">
@@ -362,8 +372,19 @@ export default function VoiceDawahModal({
               </div>
 
               {isRecording && (
-                <div className="text-xs text-rose-300 font-mono tabular-nums">
-                  রেকর্ডিং চলছে: {formatTimer(recordingSeconds)}
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div className="text-xs text-rose-300 font-mono tabular-nums">
+                    রেকর্ডিং চলছে: {formatTimer(recordingSeconds)}
+                  </div>
+                  <div className="flex items-end gap-1 h-6" aria-hidden="true">
+                    {[0, 0.14, 0.28, 0.1, 0.22, 0.05].map((delay, i) => (
+                      <span
+                        key={i}
+                        className="w-1 h-5 rounded-full bg-rose-400 mic-wave-bar"
+                        style={{ animationDelay: `${delay}s` }}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -471,6 +492,13 @@ export default function VoiceDawahModal({
                 <p className="text-sm text-[#EDF4F0] leading-relaxed">“{editedTranscription}”</p>
               )}
             </div>
+
+            {monitoringConsented && selfVsAdminComparison && (
+              <div className="p-4 rounded-2xl bg-[#34D399]/10 border border-[#34D399]/30 space-y-1.5">
+                <div className="eyebrow text-[#34D399]">Self Report ↔ Admin Observation</div>
+                <p className="text-xs text-[#EDF4F0]/90 leading-relaxed">{selfVsAdminComparison}</p>
+              </div>
+            )}
 
             {/* AI-Understood Observations */}
             <div className="space-y-2">

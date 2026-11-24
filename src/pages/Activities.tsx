@@ -116,13 +116,13 @@ export default function Activities() {
                 {allContacts.map(contact => (
                   <div key={contact.id} className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
                     <div>
-                      <p className="text-sm font-medium text-[#E5E5E7]">{contact.name}</p>
+                      <p className="text-sm font-medium text-[#EDF4F0]">{contact.name}</p>
                       <p className="text-xs text-white/40">{contact.area}</p>
                     </div>
                     <Button 
                       variant={contact[targetKey] ? "default" : "outline"} 
                       size="sm"
-                      className={`h-7 w-20 text-xs ${contact[targetKey] ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}`}
+                      className={`h-7 w-20 text-xs ${contact[targetKey] ? 'bg-[#0E9F6E] hover:bg-[#34D399] hover:text-[#04140D] text-white' : ''}`}
                       onClick={() => toggleContactTarget(contact, targetKey as string, contact[targetKey] as boolean)}
                     >
                       {contact[targetKey] ? 'Added' : 'Add'}
@@ -146,7 +146,7 @@ export default function Activities() {
               {list.map(contact => (
                 <div key={contact.id} className="p-4 flex items-center justify-between group hover:bg-white/[0.02] transition-colors">
                   <div>
-                    <p className="text-sm font-medium text-[#E5E5E7]">{contact.name}</p>
+                    <p className="text-sm font-medium text-[#EDF4F0]">{contact.name}</p>
                     <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
                       <MapPin className="w-3 h-3" /> {contact.area || 'Unknown Area'}
                     </div>

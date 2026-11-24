@@ -36,15 +36,14 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setBranding(data);
         
         // Update favicon dynamically
-        if (data.favicon) {
-          let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-          if (!link) {
-            link = document.createElement('link');
-            link.rel = 'icon';
-            document.head.appendChild(link);
-          }
-          link.href = data.favicon;
+        const faviconHref = data.favicon || '/assets/aistudio/e2e2df32-f624-464c-bbf2-dd5e68b4722a_268f824d.jpg';
+        let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+        if (!link) {
+          link = document.createElement('link');
+          link.rel = 'icon';
+          document.head.appendChild(link);
         }
+        link.href = faviconHref;
       }
     } catch (error) {
       console.error('Failed to fetch branding data:', error);

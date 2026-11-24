@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, X, ArrowRight, Loader2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import CareRadarBell from './CareRadarBell';
 
 interface SearchResult {
   id: string;
@@ -133,8 +134,9 @@ export default function GlobalSearchBar() {
                   className="w-full text-left px-4 py-3 hover:bg-white/[0.06] transition-colors flex items-center justify-between gap-3 group"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-[#EDF4F0] group-hover:text-[#B6F5D8] transition-colors truncate">
-                      {item.name}
+                    <div className="text-sm font-medium text-[#EDF4F0] group-hover:text-[#B6F5D8] transition-colors truncate flex items-center gap-2">
+                      <span className="truncate">{item.name}</span>
+                      <CareRadarBell contactId={item.id} compact />
                     </div>
                     <div className="text-xs text-[#8EA39A] flex flex-wrap items-center gap-1.5 mt-0.5">
                       <span className="tabular-nums">স্টেজ {item.currentStage}</span>
