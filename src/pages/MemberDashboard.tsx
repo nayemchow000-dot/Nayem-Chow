@@ -4,10 +4,11 @@ import { STAGES } from '../types';
 import { 
   User, ShieldCheck, Lock, Globe, Copy, Check, ExternalLink, 
   MapPin, Phone, Calendar, Award, CheckCircle2, Circle, 
-  Settings, Key, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles, HeartHandshake
+  Settings, Key, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles, HeartHandshake, Mic
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { apiFetch } from '../lib/api';
+import VoiceDawahModal from '../components/VoiceDawahModal';
 
 export default function MemberDashboard() {
   const { user, refreshUser, updatePrivacy, updateProfile } = useAuth();
@@ -45,6 +46,7 @@ export default function MemberDashboard() {
 
   // Password modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -244,6 +246,23 @@ export default function MemberDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {contact && (
+              <button
+                type="button"
+                onClick={() => setVoiceModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl border border-[#34D399]/35 bg-[#34D399]/15 hover:bg-[#34D399]/25 text-[#B6F5D8] text-xs font-medium transition-colors flex items-center gap-1.5"
+              >
+                <Mic className="w-3.5 h-3.5 text-[#34D399]" />
+                AI ভয়েস আপডেট
+              </button>
+            )}
+            <Link
+              to="/my-track?voice=1"
+              className="px-3.5 py-2 rounded-xl border border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-[#EDF4F0] text-xs font-medium transition-colors flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#34D399]" />
+              ট্র্যাক ভয়েস
+            </Link>
             <button
               onClick={() => setShowPasswordModal(true)}
               className="px-3.5 py-2 rounded-xl border border-white/15 bg-white/[0.05] hover:bg-white/[0.1] text-[#EDF4F0] text-xs font-medium transition-colors flex items-center gap-1.5"
@@ -704,6 +723,23 @@ export default function MemberDashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {contact && (
+        <VoiceDawahModal
+          open={voiceModalOpen}
+          onOpenChange={setVoiceModalOpen}
+          member={{
+            id: contact.id,
+            name: contact.name,
+            currentStage: contact.currentStage,
+            priorityLevel: contact.priorityLevel,
+            categoryTags: contact.categoryTags,
+          }}
+          onApproved={() => {
+            refreshUser();
+          }}
+        />
       )}
     </div>
   );

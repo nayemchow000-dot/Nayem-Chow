@@ -1288,9 +1288,11 @@ apiRouter.post('/ai/transcribe', async (req, res) => {
     const authUser = await resolveAuthUser(req);
     const canTranscribe =
       authUser &&
-      (authUser.role === 'admin' || (authUser.role === 'responsible' && !!authUser.permissions?.useVoiceUpdate));
+      (authUser.role === 'admin' ||
+        authUser.role === 'member' ||
+        (authUser.role === 'responsible' && !!authUser.permissions?.useVoiceUpdate));
     if (!canTranscribe) {
-      return res.status(403).json({ error: 'শুধুমাত্র অনুমোদিত অ্যাডমিন/দায়িত্বশীল ভয়েস ইনপুট ব্যবহার করতে পারবেন।' });
+      return res.status(403).json({ error: 'ভয়েস ইনপুট ব্যবহারের জন্য অনুমোদিত অ্যাকাউন্ট প্রয়োজন।' });
     }
 
     const { audioBase64, mimeType } = req.body;
@@ -1575,8 +1577,8 @@ apiRouter.post('/ai/voice-entries/:entryId/cancel', async (req, res) => {
   try {
     await ensureAiTables();
     const authUser = await resolveAuthUser(req);
-    if (!authUser || (authUser.role !== 'admin' && !(authUser.role === 'responsible' && authUser.permissions?.useVoiceUpdate))) {
-      return res.status(403).json({ error: 'Admin or authorized responsible access required' });
+    if (!authUser) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const entryRows = await db.select().from(aiVoiceEntries).where(eq(aiVoiceEntries.id, req.params.entryId));
@@ -1602,13 +1604,16 @@ apiRouter.get('/contacts/:id/voice-history', async (req, res) => {
   try {
     await ensureAiTables();
     const authUser = await resolveAuthUser(req);
-    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
-      return res.status(403).json({ error: 'Admin or responsible access required' });
+    if (!authUser) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
     if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
     const contactRows = await db.select().from(contacts).where(eq(contacts.id, req.params.id));
     if (contactRows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (!canAccessContact(authUser, contactRows[0])) {
+    if (!canUseVoiceForContact(authUser, contactRows[0]) && !canAccessContact(authUser, contactRows[0])) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (authUser.role === 'member' && !canUseVoiceForContact(authUser, contactRows[0])) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1658,8 +1663,8 @@ apiRouter.post('/contacts/:id/insights/refresh', async (req, res) => {
   try {
     await ensureAiTables();
     const authUser = await resolveAuthUser(req);
-    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
-      return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন বা দায়িত্বশীল AI বিশ্লেষণ তৈরি বা আপডেট করতে পারবেন।' });
+    if (!authUser) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
     if (!UUID_REGEX.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
 
@@ -1674,7 +1679,7 @@ apiRouter.post('/contacts/:id/insights/refresh', async (req, res) => {
     ]);
 
     if (contactRows.length === 0) return res.status(404).json({ error: 'Member not found' });
-    if (!canCareForContact(authUser, contactRows[0])) {
+    if (!canCareForContact(authUser, contactRows[0]) && !canUseVoiceForContact(authUser, contactRows[0])) {
       return res.status(403).json({ error: 'এই সদস্যের AI বিশ্লেষণ আপডেট করার অনুমতি নেই।' });
     }
 
@@ -1722,8 +1727,8 @@ apiRouter.get('/ai/dashboard', async (req, res) => {
   try {
     await ensureAiTables();
     const authUser = await resolveAuthUser(req);
-    if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'responsible')) {
-      return res.status(403).json({ error: 'Admin or responsible access required' });
+    if (!authUser) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const [rawContacts, rawEntries, rawFollowUps, rawObs, allCats] = await Promise.all([
@@ -1734,7 +1739,9 @@ apiRouter.get('/ai/dashboard', async (req, res) => {
       db.select().from(customCategories),
     ]);
 
-    const allContacts = rawContacts.filter(c => canCareForContact(authUser, c));
+    const allContacts = rawContacts.filter(c =>
+      authUser.role === 'member' ? canUseVoiceForContact(authUser, c) : canCareForContact(authUser, c)
+    );
     const allowedIds = new Set(allContacts.map(c => c.id));
     const allEntries = rawEntries.filter(e => allowedIds.has(e.contactId));
     const allFollowUps = rawFollowUps.filter(f => allowedIds.has(f.contactId));

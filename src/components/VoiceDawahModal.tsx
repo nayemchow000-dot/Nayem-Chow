@@ -19,9 +19,11 @@ import {
   Check,
   Volume2,
   RotateCcw,
+  Upload,
 } from 'lucide-react';
 import { AiVoiceEntry, CustomCategory, STAGES, Priority } from '../types';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface VoiceDawahModalProps {
   open: boolean;
@@ -46,16 +48,19 @@ export default function VoiceDawahModal({
   allCategories: providedCategories,
   onApproved,
 }: VoiceDawahModalProps) {
+  const { user } = useAuth();
   // Workflow steps: 'record' -> 'transcribed' -> 'review' -> 'done'
   const [step, setStep] = useState<'record' | 'transcribed' | 'review' | 'done'>('record');
 
-  // Audio recording state
+  // Audio recording & live speech state
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBase64, setAudioBase64] = useState<string | null>(null);
   const [audioMimeType, setAudioMimeType] = useState<string>('audio/webm');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const speechRecRef = useRef<any>(null);
+  const liveTranscriptRef = useRef<string>('');
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | null>(null);
 
@@ -126,6 +131,14 @@ export default function VoiceDawahModal({
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    if (speechRecRef.current) {
+      try {
+        speechRecRef.current.stop();
+      } catch {
+        // ignore
+      }
+      speechRecRef.current = null;
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
         mediaRecorderRef.current.stop();
@@ -137,17 +150,117 @@ export default function VoiceDawahModal({
     setIsRecording(false);
   };
 
+  const transcribeAudioPayload = async (b64: string, mime: string) => {
+    if (!b64) return;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 25000);
+    try {
+      setTranscribing(true);
+      setError(null);
+      const res = await apiFetch('/api/ai/transcribe', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioBase64: b64, mimeType: mime }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'ট্রান্সক্রিপশন ব্যর্থ হয়েছে');
+      setOriginalTranscription(data.transcription);
+      setEditedTranscription(data.transcription);
+      setStep('transcribed');
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setError('ভয়েস ট্রান্সক্রিপশনে বেশি সময় লাগছে। আবার চেষ্টা করুন অথবা নিচে সরাসরি বাংলা লিখুন।');
+      } else {
+        setError(err?.message || 'ভয়েস থেকে টেক্সট রূপান্তর ব্যর্থ হয়েছে। নিচে সরাসরি বাংলা লিখতে পারেন।');
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+      setTranscribing(false);
+    }
+  };
+
+  const handleAudioFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    const mime = (file.type || 'audio/webm').split(';')[0];
+    setAudioMimeType(mime);
+    setAudioUrl(URL.createObjectURL(file));
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        setAudioBase64(reader.result);
+        transcribeAudioPayload(reader.result, mime);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const startRecording = async () => {
     try {
       setError(null);
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setError('আপনার ব্রাউজারে মাইক্রোফোন রেকর্ডিং সমর্থিত নয়। নিচে সরাসরি বাংলা টেক্সট লিখে বিশ্লেষণ করতে পারেন।');
+        setError('আপনার ব্রাউজারে মাইক্রোফোন রেকর্ডিং সমর্থিত নয়। অডিও ফাইল আপলোড করুন অথবা নিচে সরাসরি বাংলা টেক্সট লিখুন।');
         return;
       }
+
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const perm = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          if (perm.state === 'denied') {
+            setError('মাইক্রোফোন অনুমতি বন্ধ রয়েছে। ব্রাউজারের অ্যাড্রেস বার থেকে মাইক্রোফোন Allow করে পেজ রিফ্রেশ করুন, অথবা অডিও ফাইল আপলোড / নিচে টেক্সট লিখুন।');
+            return;
+          }
+        }
+      } catch {
+        // Ignore permissions API errors in browsers that do not support microphone query
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
       const chosenType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
       const recorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+
+      liveTranscriptRef.current = '';
+      const existingBeforeStart = editedTranscription.trim();
+
+      // Start live browser Bengali SpeechRecognition alongside MediaRecorder for instant text
+      const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRec) {
+        try {
+          const rec = new SpeechRec();
+          rec.lang = 'bn-BD';
+          rec.continuous = true;
+          rec.interimResults = true;
+          let finalAccum = existingBeforeStart ? `${existingBeforeStart} ` : '';
+          rec.onresult = (event: any) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const part = event.results[i][0]?.transcript || '';
+              if (event.results[i].isFinal) {
+                finalAccum += `${part} `;
+              } else {
+                interim += part;
+              }
+            }
+            const combined = (finalAccum + interim).trim();
+            if (combined) {
+              liveTranscriptRef.current = combined;
+              setEditedTranscription(combined);
+              if (!originalTranscription) setOriginalTranscription(combined);
+            }
+          };
+          rec.onerror = () => {
+            // Silent fallback to server audio transcription on stop
+          };
+          rec.start();
+          speechRecRef.current = rec;
+        } catch {
+          speechRecRef.current = null;
+        }
+      }
 
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
@@ -155,19 +268,28 @@ export default function VoiceDawahModal({
       };
 
       recorder.onstop = async () => {
-        const mime = recorder.mimeType || 'audio/webm';
+        const mime = (recorder.mimeType || 'audio/webm').split(';')[0];
         const blob = new Blob(chunksRef.current, { type: mime });
-        setAudioMimeType(mime.split(';')[0]);
+        setAudioMimeType(mime);
         setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
 
         const reader = new FileReader();
         reader.onloadend = () => {
           if (typeof reader.result === 'string') {
             setAudioBase64(reader.result);
+            // If live Bengali SpeechRecognition already captured text, show immediately without waiting!
+            // Otherwise automatically transcribe via Gemini audio API with timeout protection.
+            if (liveTranscriptRef.current.trim().length >= 3) {
+              setOriginalTranscription(liveTranscriptRef.current.trim());
+              setEditedTranscription(liveTranscriptRef.current.trim());
+              setStep('transcribed');
+            } else {
+              transcribeAudioPayload(reader.result, mime);
+            }
           }
         };
         reader.readAsDataURL(blob);
-        stream.getTracks().forEach((t) => t.stop());
       };
 
       mediaRecorderRef.current = recorder;
@@ -178,8 +300,15 @@ export default function VoiceDawahModal({
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      console.error('Mic error:', err);
-      setError('মাইক্রোফোন ব্যবহারের অনুমতি পাওয়া যায়নি। ব্রাউজার সেটিংস থেকে মাইক্রোফোন Allow করুন অথবা নিচে টেক্সট লিখুন।');
+      const name = String(err?.name || '');
+      const msg = String(err?.message || '').toLowerCase();
+      if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setError('ডিভাইসে কোনো মাইক্রোফোন পাওয়া যায়নি। অডিও ফাইল আপলোড করুন অথবা নিচে সরাসরি বাংলা টেক্সট লিখুন।');
+      } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || msg.includes('denied') || msg.includes('permission')) {
+        setError('মাইক্রোফোন ব্যবহারের অনুমতি পাওয়া যায়নি। ব্রাউজার সেটিংস থেকে মাইক্রোফোন Allow করুন অথবা অডিও ফাইল আপলোড / নিচে টেক্সট লিখুন।');
+      } else {
+        setError('মাইক্রোফোন চালু করা যায়নি। অডিও ফাইল আপলোড করুন অথবা নিচে সরাসরি বাংলা টেক্সট লিখুন।');
+      }
     }
   };
 
@@ -189,24 +318,7 @@ export default function VoiceDawahModal({
 
   const handleTranscribeAudio = async () => {
     if (!audioBase64) return;
-    try {
-      setTranscribing(true);
-      setError(null);
-      const res = await apiFetch('/api/ai/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioBase64, mimeType: audioMimeType }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'ট্রান্সক্রিপশন ব্যর্থ হয়েছে');
-      setOriginalTranscription(data.transcription);
-      setEditedTranscription(data.transcription);
-      setStep('transcribed');
-    } catch (err: any) {
-      setError(err.message || 'ভয়েস থেকে টেক্সট রূপান্তর ব্যর্থ হয়েছে।');
-    } finally {
-      setTranscribing(false);
-    }
+    await transcribeAudioPayload(audioBase64, audioMimeType);
   };
 
   const handleAnalyzeText = async () => {
@@ -334,7 +446,9 @@ export default function VoiceDawahModal({
         )}
 
         <div className="p-3 rounded-xl bg-[#34D399]/10 border border-[#34D399]/25 text-[#B6F5D8] text-[11px] leading-relaxed">
-          সদস্যের Self Report এবং Admin Observation আলাদা রাখা হয়েছে। অনুমোদনের আগে কোনো তথ্য পরিবর্তন হবে না।
+          {user?.role === 'member'
+            ? 'আপনার ভয়েস নোট বিশ্লেষণের পর আপনার চূড়ান্ত অনুমোদন ছাড়া কোনো তথ্য পরিবর্তন হবে না।'
+            : 'সদস্যের Self Report এবং Admin Observation আলাদা রাখা হয়েছে। অনুমোদনের আগে কোনো তথ্য পরিবর্তন হবে না।'}
         </div>
 
         {/* STEP 1 & 2: RECORD & EDIT TRANSCRIPTION */}
@@ -349,26 +463,40 @@ export default function VoiceDawahModal({
                   </p>
                 </div>
 
-                {!isRecording ? (
-                  <Button
-                    type="button"
-                    onClick={startRecording}
-                    className="gap-2 min-h-[40px]"
-                  >
-                    <Mic className="w-4 h-4" />
-                    রেকর্ডিং শুরু
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={stopRecording}
-                    variant="destructive"
-                    className="gap-2 min-h-[40px]"
-                  >
-                    <Square className="w-4 h-4" />
-                    থামান ({formatTimer(recordingSeconds)})
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isRecording ? (
+                    <>
+                      <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-[#C6D5CE] cursor-pointer min-h-[40px] transition-colors">
+                        <Upload className="w-3.5 h-3.5" />
+                        অডিও ফাইল
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={handleAudioFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        onClick={startRecording}
+                        className="gap-2 min-h-[40px]"
+                      >
+                        <Mic className="w-4 h-4" />
+                        রেকর্ডিং শুরু
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={stopRecording}
+                      variant="destructive"
+                      className="gap-2 min-h-[40px]"
+                    >
+                      <Square className="w-4 h-4" />
+                      থামান ({formatTimer(recordingSeconds)})
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {isRecording && (

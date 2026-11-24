@@ -13,7 +13,10 @@ export default function Contacts() {
   const navigate = useNavigate();
   const { user, isAdmin, isCoordinator, hasPermission } = useAuth();
   const { enabled: careEnabled, summaries: careSummaries, refreshRadar } = useCareRadar();
-  const canVoice = isAdmin || hasPermission('useVoiceUpdate');
+  const canVoiceForContact = (c: Contact) =>
+    isAdmin ||
+    (isCoordinator && hasPermission('useVoiceUpdate')) ||
+    (!!user && (c.id === user.contactId || c.createdByAccountId === user.id));
   const [voiceMember, setVoiceMember] = useState<Contact | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [page, setPage] = useState(1);
@@ -364,7 +367,7 @@ export default function Contacts() {
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <CareRadarBell contactId={contact.id} />
-                          {canVoice && (
+                          {canVoiceForContact(contact) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -466,7 +469,7 @@ export default function Contacts() {
                   </div>
 
                   {/* Mobile Action Buttons */}
-                  <div className={`grid ${canVoice ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 pt-1`}>
+                  <div className={`grid ${canVoiceForContact(contact) ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 pt-1`}>
                     <button
                       type="button"
                       className="py-1.5 px-2 text-[11px] font-medium glass-2 hover:border-[#34D399]/35 rounded-xl text-[#EDF4F0] text-center"
@@ -495,7 +498,7 @@ export default function Contacts() {
                     >
                       Edit
                     </button>
-                    {canVoice && (
+                    {canVoiceForContact(contact) && (
                       <button
                         type="button"
                         className="py-1.5 px-2 text-[11px] font-medium bg-[#34D399]/15 border border-[#34D399]/35 hover:bg-[#34D399]/25 rounded-xl text-[#B6F5D8] text-center inline-flex items-center justify-center gap-1"
@@ -564,7 +567,7 @@ export default function Contacts() {
         </DialogContent>
       </Dialog>
 
-      {canVoice && voiceMember && (
+      {voiceMember && canVoiceForContact(voiceMember) && (
         <VoiceDawahModal
           open={!!voiceMember}
           onOpenChange={(open) => {

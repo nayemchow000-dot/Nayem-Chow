@@ -65,18 +65,21 @@ export default function ContactProfile() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, isAdmin, isCoordinator, hasPermission } = useAuth();
   const { refreshRadar } = useCareRadar();
-  const canVoice = isAdmin || hasPermission('useVoiceUpdate');
+  const [contact, setContact] = useState<Contact | null>(null);
+  const canVoice =
+    isAdmin ||
+    (isCoordinator && hasPermission('useVoiceUpdate')) ||
+    (!!user && !!contact && (contact.id === user.contactId || contact.createdByAccountId === user.id));
   const rawTab = searchParams.get('tab') || 'overview';
   const validTabs = [
     'overview',
     'ai-guidance',
     'journey',
     'salah',
-    ...(isCoordinator ? ['self-report', 'admin-obs', 'ai-analysis', 'audit'] : []),
+    ...(isCoordinator ? ['self-report', 'admin-obs', 'ai-analysis'] : []),
+    ...(isCoordinator || canVoice ? ['audit'] : []),
   ];
   const activeTab = validTabs.includes(rawTab) ? rawTab : 'overview';
-
-  const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,7 +149,9 @@ export default function ContactProfile() {
         apiFetch(`/api/contacts/${id}/salah`).then((r) => (r.ok ? r.json() : [])),
         apiFetch(`/api/contacts/${id}/follow-ups`).then((r) => (r.ok ? r.json() : [])),
         apiFetch(`/api/contacts/${id}/insights`).then((r) => (r.ok ? r.json() : null)),
-        isCoordinator ? apiFetch(`/api/contacts/${id}/voice-history`).then((r) => (r.ok ? r.json() : [])) : Promise.resolve([]),
+        (isCoordinator || user?.role === 'member')
+          ? apiFetch(`/api/contacts/${id}/voice-history`).then((r) => (r.ok ? r.json() : []))
+          : Promise.resolve([]),
         isCoordinator ? apiFetch(`/api/contacts/${id}/monitoring-view`).then((r) => (r.ok ? r.json() : null)) : Promise.resolve(null),
       ])
         .then(([salahData, fuData, insData, vhData, monData]) => {
@@ -471,7 +476,7 @@ export default function ContactProfile() {
           <TabsTrigger value="ai-guidance">AI Gap & Guidance</TabsTrigger>
           <TabsTrigger value="journey">Growth Journey</TabsTrigger>
           <TabsTrigger value="salah">Salah Tracking</TabsTrigger>
-          {isCoordinator && <TabsTrigger value="audit">Voice Audit Log</TabsTrigger>}
+          {(isCoordinator || canVoice) && <TabsTrigger value="audit">Voice Audit Log</TabsTrigger>}
         </TabsList>
 
         {/* OVERVIEW & FOLLOW-UPS TAB */}
@@ -809,7 +814,7 @@ export default function ContactProfile() {
                 পর্যবেক্ষিত তথ্যের ভিত্তিতে সম্মানজনক ও ধাপে ধাপে অগ্রগতির পরামর্শ (তথ্য অনুপস্থিত থাকা মানে আমল না করা নয়)।
               </p>
             </div>
-            {isCoordinator && (
+            {(isCoordinator || canVoice) && (
               <Button
                 type="button"
                 onClick={handleRefreshInsights}
@@ -1460,8 +1465,8 @@ export default function ContactProfile() {
           </TabsContent>
         )}
 
-        {/* VOICE AUDIT HISTORY TAB (ADMIN & RESPONSIBLE) */}
-        {isCoordinator && (
+        {/* VOICE AUDIT HISTORY TAB */}
+        {(isCoordinator || canVoice) && (
           <TabsContent value="audit" className="space-y-4">
             <Card>
               <CardHeader className="border-b border-white/[0.08] pb-4">

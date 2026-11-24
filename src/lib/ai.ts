@@ -3,11 +3,26 @@ import { z } from "zod";
 import { STAGES, UserRole } from "../types";
 
 let _aiClient: GoogleGenAI | null = null;
+let _aiBetaClient: GoogleGenAI | null = null;
 
-function getAiClient(): GoogleGenAI {
+function getAiClient(apiVersion?: "v1beta"): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY environment variable is not configured on the server.");
+  }
+  if (apiVersion === "v1beta") {
+    if (!_aiBetaClient) {
+      _aiBetaClient = new GoogleGenAI({
+        apiKey,
+        apiVersion: "v1beta",
+        httpOptions: {
+          headers: {
+            "User-Agent": "aistudio-build",
+          },
+        },
+      });
+    }
+    return _aiBetaClient;
   }
   if (!_aiClient) {
     _aiClient = new GoogleGenAI({
@@ -20,6 +35,18 @@ function getAiClient(): GoogleGenAI {
     });
   }
   return _aiClient;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} সময়সীমা অতিক্রম করেছে।`)), ms);
+    }),
+  ]);
 }
 
 export interface DbCategory {
@@ -80,34 +107,62 @@ export interface GapAndGuidanceOutput {
 }
 
 /**
- * Transcribe Bengali voice note audio using Gemini 3.5 Transcribe.
+ * Transcribe Bengali voice note audio reliably with timeout + model fallback.
+ * Tries gemini-3.5-transcribe (v1beta), then falls back to gemini-4-hydrogen multimodal audio.
  */
 export async function transcribeBengaliAudio(base64Audio: string, mimeType: string): Promise<string> {
-  const ai = getAiClient();
-  const cleanBase64 = base64Audio.replace(/^data:[^;]+;base64,/, "");
+  const cleanBase64 = base64Audio.replace(/^data:[^;]+;base64,/, "").trim();
+  if (!cleanBase64 || cleanBase64.length < 120) {
+    throw new Error("রেকর্ড করা অডিওটি খুব ছোট বা খালি। অনুগ্রহ করে আবার বলুন।");
+  }
 
+  const normalizedMime = (mimeType || "audio/webm").split(";")[0].trim() || "audio/webm";
   const audioPart = {
     inlineData: {
-      mimeType: mimeType || "audio/webm",
+      mimeType: normalizedMime,
       data: cleanBase64,
     },
   };
+  const promptText =
+    "Transcribe this Bengali voice note accurately in natural Bengali script. Preserve Islamic and Dawah terms accurately (such as সালাহ, জামাত, ফজর, ইলমি মুহাজারা, পাঠচক্র, বয়ান, তাফসির, দীনিয়াত, তাহাজ্জুদ, নফল রোজা, দাওয়াহ). Return only the transcribed Bengali text without extra commentary.";
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3.5-transcribe",
-    contents: {
-      parts: [
-        audioPart,
-        {
-          text: "Transcribe this Bengali voice note accurately in natural Bengali script. Preserve Islamic and Dawah terms accurately (such as সালাহ, জামাত, ফজর, ইলমি মুহাজারা, পাঠচক্র, বয়ান, তাফসির, দীনিয়াত, তাহাজ্জুদ, নফল রোজা, দাওয়াহ). Return only the transcribed text without extra commentary.",
-        },
-      ],
-    },
-  });
+  const tryTranscribe = async (client: GoogleGenAI, model: string, useLowThinking = false) => {
+    const response = await withTimeout(
+      client.models.generateContent({
+        model,
+        contents: { parts: [audioPart, { text: promptText }] },
+        ...(useLowThinking ? { config: { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } } : {}),
+      }),
+      18000,
+      "ভয়েস ট্রান্সক্রিপশন"
+    );
+    return (response.text ?? "").trim();
+  };
 
-  const text = (response.text ?? "").trim();
+  let text = "";
+  let lastErr: any = null;
+
+  try {
+    text = await tryTranscribe(getAiClient("v1beta"), "gemini-3.5-transcribe");
+  } catch (err1: any) {
+    lastErr = err1;
+    try {
+      text = await tryTranscribe(getAiClient(), "gemini-4-hydrogen", true);
+    } catch (err2: any) {
+      lastErr = err2;
+      try {
+        text = await tryTranscribe(getAiClient("v1beta"), "gemini-4-hydrogen", true);
+      } catch (err3: any) {
+        lastErr = err3;
+      }
+    }
+  }
+
   if (!text) {
-    throw new Error("ভয়েস নোট থেকে কোনো স্পষ্ট কথা শনাক্ত করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।");
+    if (lastErr) {
+      console.warn("[AI Transcribe Warning]", lastErr?.message || lastErr);
+    }
+    throw new Error("ভয়েস থেকে স্পষ্ট বাংলা লেখা শনাক্ত করা যায়নি। অনুগ্রহ করে আবার রেকর্ড করুন অথবা নিচে সরাসরি বাংলা লিখুন।");
   }
   return text;
 }
@@ -671,4 +726,128 @@ export async function refineCareRadarWording(params: {
     return null;
   }
 }
+
+export interface MyTrackVoiceResult {
+  matchedItemKeys: string[];
+  extractedDawahLogs: Array<{
+    targetName: string | null;
+    description: string;
+    outcome: string | null;
+  }>;
+  extractedNote: string | null;
+  summary: string;
+}
+
+export async function analyzeVoiceForMyTrack(params: {
+  transcription: string;
+  trackerItems: Array<{ key: string; banglaLabel: string; group: string }>;
+}): Promise<MyTrackVoiceResult> {
+  const text = params.transcription.trim();
+  const validKeys = new Set(params.trackerItems.map((t) => t.key));
+
+  const fallback = (): MyTrackVoiceResult => {
+    const lower = text.toLowerCase();
+    const matched = params.trackerItems
+      .filter((item) => {
+        const words = item.banglaLabel
+          .toLowerCase()
+          .split(/[\s,/()-]+/)
+          .filter((w) => w.length >= 3);
+        return words.some((w) => lower.includes(w));
+      })
+      .map((i) => i.key);
+
+    const hasDawahCue = /দাওয়াত|দাওয়াহ|বই|উপহার|সাক্ষাৎ|কল|ভাই/.test(lower);
+    return {
+      matchedItemKeys: matched,
+      extractedDawahLogs: hasDawahCue
+        ? [{ targetName: null, description: text, outcome: null }]
+        : [],
+      extractedNote: text,
+      summary:
+        matched.length > 0
+          ? `${matched.length}টি দৈনিক আমল/দাওয়াহ আইটেম শনাক্ত হয়েছে।`
+          : "আপনার বক্তব্য ব্যক্তিগত নোট ও দাওয়াহ কার্যক্রমে সংরক্ষণের জন্য প্রস্তুত।",
+    };
+  };
+
+  if (!process.env.GEMINI_API_KEY) {
+    return fallback();
+  }
+
+  try {
+    const ai = getAiClient();
+    const prompt = `Member's Bengali Voice Note about Today's Amal & Dawah Activities:
+"""
+${text}
+"""
+
+REAL_TRACKER_ITEMS (Only use exact "key" values from this list):
+${JSON.stringify(params.trackerItems, null, 2)}
+
+Match clearly performed items to matchedItemKeys, extract any Dawah interactions (speaking to a brother, inviting to mosque/program, gifting a book, phone call) into extractedDawahLogs, and summarize warmly in Bengali.`;
+
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: prompt,
+        config: {
+          systemInstruction:
+            "You help a Dawah member log their own daily Amal and Dawah activities from a Bengali voice note. Only match keys that exist in REAL_TRACKER_ITEMS and are clearly mentioned as completed. Respond in JSON only.",
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              matchedItemKeys: { type: Type.ARRAY, items: { type: Type.STRING } },
+              extractedDawahLogs: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    targetName: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    outcome: { type: Type.STRING },
+                  },
+                  required: ["description"],
+                },
+              },
+              extractedNote: { type: Type.STRING },
+              summary: { type: Type.STRING },
+            },
+            required: ["matchedItemKeys", "extractedDawahLogs", "summary"],
+          },
+        },
+      }),
+      18000,
+      "আমার ট্র্যাক AI বিশ্লেষণ"
+    );
+
+    const parsed = JSON.parse((response.text ?? "{}").trim());
+    const matchedItemKeys = Array.isArray(parsed.matchedItemKeys)
+      ? parsed.matchedItemKeys.map(String).filter((k: string) => validKeys.has(k))
+      : [];
+    const extractedDawahLogs = Array.isArray(parsed.extractedDawahLogs)
+      ? parsed.extractedDawahLogs
+          .filter((l: any) => l && String(l.description || "").trim())
+          .slice(0, 5)
+          .map((l: any) => ({
+            targetName: l.targetName ? String(l.targetName).trim() : null,
+            description: String(l.description).trim(),
+            outcome: l.outcome ? String(l.outcome).trim() : null,
+          }))
+      : [];
+
+    return {
+      matchedItemKeys,
+      extractedDawahLogs,
+      extractedNote: parsed.extractedNote ? String(parsed.extractedNote).trim() : null,
+      summary: String(parsed.summary || "বিশ্লেষণ সম্পন্ন হয়েছে।"),
+    };
+  } catch (err: any) {
+    console.warn("[MyTrack Voice Fallback]", err?.message || err);
+    return fallback();
+  }
+}
+
 

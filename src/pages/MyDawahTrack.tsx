@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   CheckCircle2,
   Circle,
@@ -21,6 +21,7 @@ import {
   Loader2,
   Clock,
   Sparkles,
+  Mic,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,6 +44,7 @@ import {
   Contact,
 } from '../types';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '../components/ui';
+import MyTrackVoiceModal from '../components/MyTrackVoiceModal';
 
 type TrackTab = 'today' | 'weekly' | 'monthly' | 'dawah' | 'notes' | 'reminders' | 'privacy';
 
@@ -54,7 +56,9 @@ function formatDateOffset(offset: number): string {
 
 export default function MyDawahTrack() {
   const { user, featureFlags } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TrackTab>('today');
+  const [voiceTrackOpen, setVoiceTrackOpen] = useState(false);
 
   // Today / Yesterday date toggle
   const todayStr = formatDateOffset(0);
@@ -135,6 +139,13 @@ export default function MyDawahTrack() {
   useEffect(() => {
     fetchReminders();
   }, [fetchReminders]);
+
+  useEffect(() => {
+    if (searchParams.get('voice') === '1') {
+      setVoiceTrackOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (activeTab === 'weekly' || activeTab === 'monthly') {
@@ -390,7 +401,15 @@ export default function MyDawahTrack() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            type="button"
+            onClick={() => setVoiceTrackOpen(true)}
+            className="gap-2 text-xs"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            AI ভয়েস আপডেট
+          </Button>
           <div className="glass-2 px-3.5 py-2 rounded-2xl flex items-center gap-2 text-xs">
             <Flame className="w-4 h-4 text-[#F4A85E]" />
             <span className="text-[#8EA39A]">ধারাবাহিকতা:</span>
@@ -1187,6 +1206,46 @@ export default function MyDawahTrack() {
           </div>
         </div>
       )}
+
+      <MyTrackVoiceModal
+        open={voiceTrackOpen}
+        onOpenChange={setVoiceTrackOpen}
+        reportDate={selectedDate}
+        trackerItems={trackerItems}
+        currentCheckedMap={checkedMap}
+        currentNote={noteInput}
+        onApplyUpdates={async ({ mergedItems, dawahLogsToAdd, noteToAppend }) => {
+          setCheckedMap(mergedItems);
+          const nextNote = noteToAppend !== null ? noteToAppend : noteInput;
+          if (noteToAppend !== null) setNoteInput(noteToAppend);
+
+          await apiFetch('/api/my-track/today', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              reportDate: selectedDate,
+              items: mergedItems,
+              note: nextNote,
+            }),
+          });
+
+          for (const log of dawahLogsToAdd) {
+            await apiFetch('/api/my-track/dawah-logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                date: selectedDate,
+                targetName: log.targetName,
+                description: log.description,
+                outcome: log.outcome,
+              }),
+            });
+          }
+
+          await fetchToday(selectedDate);
+          showToast('AI ভয়েস আপডেট সফলভাবে আপনার ট্র্যাকে যুক্ত হয়েছে!');
+        }}
+      />
     </div>
   );
 }

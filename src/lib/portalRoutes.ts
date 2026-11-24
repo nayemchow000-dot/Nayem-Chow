@@ -29,6 +29,7 @@ import {
   recomputeCareForContact,
   completeCareTaskAndGenerateNext,
 } from './careRadar';
+import { analyzeVoiceForMyTrack } from './ai';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -565,6 +566,44 @@ portalRouter.delete('/my-track/dawah-logs/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Member AI Voice Analysis for My Dawah Track (preview before user confirms)
+portalRouter.post('/my-track/analyze-voice', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const flags = await getPortalFeatureFlags();
+    if (!flags.featureMyDawahTrack) return res.status(403).json({ error: 'Feature disabled' });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+    const transcription = String(req.body?.transcription || '').trim();
+    if (!transcription) {
+      return res.status(400).json({ error: 'বাংলা বক্তব্য বা ট্রান্সক্রিপশন আবশ্যক।' });
+    }
+
+    const activeItems = await db
+      .select()
+      .from(trackerItems)
+      .where(eq(trackerItems.isActive, true))
+      .orderBy(asc(trackerItems.displayOrder));
+
+    const result = await analyzeVoiceForMyTrack({
+      transcription,
+      trackerItems: activeItems.map((t) => ({
+        key: t.key,
+        banglaLabel: t.banglaLabel,
+        group: t.group,
+      })),
+    });
+
+    res.json({
+      ...result,
+      trackerItems: activeItems,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'ভয়েস বিশ্লেষণে সমস্যা হয়েছে।' });
   }
 });
 

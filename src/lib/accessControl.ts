@@ -144,7 +144,10 @@ export function canUseVoiceForContact(
   if (authUser.role === 'responsible') {
     return !!authUser.permissions?.useVoiceUpdate && canCareForContact(authUser, contact);
   }
-  return false;
+  return (
+    (!!authUser.contactId && contact.id === authUser.contactId) ||
+    contact.createdByAccountId === authUser.userId
+  );
 }
 
 export function canDeleteContact(

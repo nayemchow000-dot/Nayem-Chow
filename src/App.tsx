@@ -108,6 +108,7 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
   const memberLinks: Array<{ href: string; label: string; icon: any; badge?: string }> = [
     ...(featureFlags.featureMyDawahTrack ? [myTrackLink] : []),
     { href: '/my-dashboard', label: 'আমার ড্যাশবোর্ড', icon: User },
+    { href: '/ai-dashboard', label: 'AI ভয়েস সেন্টার', icon: Sparkles },
     { href: '/contacts', label: 'আমার মুভমেন্ট প্রোফাইল', icon: Users },
     { href: '/activities', label: 'দাওয়া কার্যক্রম', icon: CalendarHeart },
   ];
@@ -287,7 +288,7 @@ function ProtectedLayout() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  const canAiCenter = isAdmin || hasPermission('useVoiceUpdate');
+  const canAiCenter = isAdmin || user.role === 'member' || hasPermission('useVoiceUpdate');
 
   return (
     <CareRadarProvider>
