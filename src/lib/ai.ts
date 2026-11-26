@@ -5,8 +5,18 @@ import { STAGES, UserRole } from "../types";
 let _aiClient: GoogleGenAI | null = null;
 let _aiBetaClient: GoogleGenAI | null = null;
 
+function resolveGeminiApiKey(): string {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.API_KEY ||
+    ""
+  ).trim();
+}
+
 function getAiClient(apiVersion?: "v1beta"): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = resolveGeminiApiKey();
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY environment variable is not configured on the server.");
   }
@@ -106,9 +116,20 @@ export interface GapAndGuidanceOutput {
   };
 }
 
+function normalizeAudioMimeType(mimeType: string): string {
+  const base = (mimeType || "audio/webm").split(";")[0].trim().toLowerCase();
+  if (!base) return "audio/webm";
+  if (base === "video/webm") return "audio/webm";
+  if (base === "audio/x-m4a" || base === "audio/m4a" || base === "audio/mp4a-latm") return "audio/mp4";
+  if (base === "audio/x-wav" || base === "audio/wave") return "audio/wav";
+  if (base === "audio/x-aac") return "audio/aac";
+  if (base === "audio/mpeg3" || base === "audio/x-mpeg-3") return "audio/mp3";
+  return base;
+}
+
 /**
  * Transcribe Bengali voice note audio reliably with timeout + model fallback.
- * Tries gemini-3.5-transcribe (v1beta), then falls back to gemini-4-hydrogen multimodal audio.
+ * Tries gemini-3.5-transcribe (default & v1beta), then falls back to gemini-4-hydrogen and gemini-3.1-flash-lite.
  */
 export async function transcribeBengaliAudio(base64Audio: string, mimeType: string): Promise<string> {
   const cleanBase64 = base64Audio.replace(/^data:[^;]+;base64,/, "").trim();
@@ -116,7 +137,13 @@ export async function transcribeBengaliAudio(base64Audio: string, mimeType: stri
     throw new Error("রেকর্ড করা অডিওটি খুব ছোট বা খালি। অনুগ্রহ করে আবার বলুন।");
   }
 
-  const normalizedMime = (mimeType || "audio/webm").split(";")[0].trim() || "audio/webm";
+  if (!resolveGeminiApiKey()) {
+    throw new Error(
+      "ভয়েস থেকে টেক্সট রূপান্তরের জন্য সার্ভারে GEMINI_API_KEY কনফিগার করা নেই। Settings > Secrets-এ API Key সেট করুন অথবা নিচে সরাসরি বাংলা লিখুন।"
+    );
+  }
+
+  const normalizedMime = normalizeAudioMimeType(mimeType);
   const audioPart = {
     inlineData: {
       mimeType: normalizedMime,
@@ -124,45 +151,76 @@ export async function transcribeBengaliAudio(base64Audio: string, mimeType: stri
     },
   };
   const promptText =
-    "Transcribe this Bengali voice note accurately in natural Bengali script. Preserve Islamic and Dawah terms accurately (such as সালাহ, জামাত, ফজর, ইলমি মুহাজারা, পাঠচক্র, বয়ান, তাফসির, দীনিয়াত, তাহাজ্জুদ, নফল রোজা, দাওয়াহ). Return only the transcribed Bengali text without extra commentary.";
+    "Transcribe the exact spoken words from this audio in Bengali (বাংলা) script. If there is no clear speech or only background noise/silence, return an empty string. Return only the exact spoken transcription without commentary or extra text.";
 
-  const tryTranscribe = async (client: GoogleGenAI, model: string, useLowThinking = false) => {
+  const tryTranscribe = async (
+    client: GoogleGenAI,
+    model: string,
+    thinkingLevel?: ThinkingLevel,
+    timeoutMs = 12000
+  ) => {
     const response = await withTimeout(
       client.models.generateContent({
         model,
         contents: { parts: [audioPart, { text: promptText }] },
-        ...(useLowThinking ? { config: { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } } : {}),
+        ...(thinkingLevel ? { config: { thinkingConfig: { thinkingLevel } } } : {}),
       }),
-      18000,
+      timeoutMs,
       "ভয়েস ট্রান্সক্রিপশন"
     );
     return (response.text ?? "").trim();
   };
 
+  const attempts: Array<{ label: string; run: () => Promise<string> }> = [
+    {
+      label: "gemini-3.5-transcribe(default)",
+      run: () => tryTranscribe(getAiClient(), "gemini-3.5-transcribe", undefined, 12000),
+    },
+    {
+      label: "gemini-4-hydrogen(default)",
+      run: () => tryTranscribe(getAiClient(), "gemini-4-hydrogen", ThinkingLevel.LOW, 14000),
+    },
+    {
+      label: "gemini-3.1-flash-lite(default)",
+      run: () => tryTranscribe(getAiClient(), "gemini-3.1-flash-lite", ThinkingLevel.MINIMAL, 12000),
+    },
+    {
+      label: "gemini-3.5-transcribe(v1beta)",
+      run: () => tryTranscribe(getAiClient("v1beta"), "gemini-3.5-transcribe", undefined, 10000),
+    },
+  ];
+
   let text = "";
   let lastErr: any = null;
 
-  try {
-    text = await tryTranscribe(getAiClient("v1beta"), "gemini-3.5-transcribe");
-  } catch (err1: any) {
-    lastErr = err1;
+  for (const attempt of attempts) {
     try {
-      text = await tryTranscribe(getAiClient(), "gemini-4-hydrogen", true);
-    } catch (err2: any) {
-      lastErr = err2;
-      try {
-        text = await tryTranscribe(getAiClient("v1beta"), "gemini-4-hydrogen", true);
-      } catch (err3: any) {
-        lastErr = err3;
+      const candidate = await attempt.run();
+      if (candidate) {
+        text = candidate;
+        break;
       }
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[AI Transcribe Attempt Failed: ${attempt.label}]`, err?.message || err);
     }
   }
 
   if (!text) {
-    if (lastErr) {
-      console.warn("[AI Transcribe Warning]", lastErr?.message || lastErr);
+    const errMsg = String(lastErr?.message || "");
+    if (/API_KEY_INVALID|PERMISSION_DENIED|403|API key not valid/i.test(errMsg)) {
+      throw new Error(
+        "Gemini API Key অনুমোদিত নয় বা সঠিক নয়। অনুগ্রহ করে Settings > Secrets প্যানেল থেকে API Key যাচাই করুন।"
+      );
     }
-    throw new Error("ভয়েস থেকে স্পষ্ট বাংলা লেখা শনাক্ত করা যায়নি। অনুগ্রহ করে আবার রেকর্ড করুন অথবা নিচে সরাসরি বাংলা লিখুন।");
+    if (/RESOURCE_EXHAUSTED|429|quota/i.test(errMsg)) {
+      throw new Error(
+        "এই মুহূর্তে AI ট্রান্সক্রিপশন কোটা সীমা পূর্ণ হয়েছে। কিছুক্ষণ পর চেষ্টা করুন অথবা নিচে সরাসরি বাংলা লিখুন।"
+      );
+    }
+    throw new Error(
+      "ভয়েস থেকে স্পষ্ট বাংলা লেখা শনাক্ত করা যায়নি। অনুগ্রহ করে মাইক্রোফোনের কাছে পরিষ্কারভাবে বলুন অথবা নিচে সরাসরি বাংলা লিখুন।"
+    );
   }
   return text;
 }
@@ -178,11 +236,18 @@ export async function analyzeVoiceNoteForMember(params: {
   transcription: string;
   consentedSelfReportSummary?: string | null;
 }): Promise<VoiceAnalysisOutput> {
-  const ai = getAiClient();
   const { contact, categories, existingObservations, transcription, consentedSelfReportSummary } = params;
 
   const activeCategories = categories.filter((c) => c.isActive !== false);
   const categoryById = new Map(activeCategories.map((c) => [c.id, c]));
+
+  if (!resolveGeminiApiKey()) {
+    return buildDeterministicVoiceFallback({
+      transcription,
+      activeCategories,
+      consentedSelfReportSummary,
+    });
+  }
 
   const currentTags: string[] = Array.isArray(contact.categoryTags) ? contact.categoryTags : [];
   const stageList = STAGES.map((label, idx) => `${idx + 1}. ${label}`).join("\n");
@@ -234,13 +299,15 @@ Analyze the voice note carefully and return structured JSON matching the schema.
 
   let response: any;
   try {
-    response = await ai.models.generateContent({
-      model: "gemini-4-hydrogen",
-      contents: prompt,
-    config: {
-      systemInstruction,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
-      responseMimeType: "application/json",
+    const ai = getAiClient();
+    response = await withTimeout(
+      ai.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+          responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -324,7 +391,10 @@ Analyze the voice note carefully and return structured JSON matching the schema.
         required: ["observations", "suggestedCategories", "uncertainObservations"],
       },
     },
-  });
+      }),
+      22000,
+      "ভয়েস AI বিশ্লেষণ"
+    );
   } catch (err: any) {
     console.warn("[AI Voice Analyze Fallback] Gemini unavailable, using deterministic Bengali matcher:", err?.message || err);
     return buildDeterministicVoiceFallback({
@@ -490,8 +560,31 @@ export async function generateGapAnalysisAndGuidance(params: {
   followUps: any[];
   activityRecords: any[];
 }): Promise<GapAndGuidanceOutput> {
-  const ai = getAiClient();
   const { contact, categories, observations, salahRecords, followUps, activityRecords } = params;
+
+  const buildFallback = (): GapAndGuidanceOutput => {
+    const nextStage = STAGES[Math.min(15, contact.currentStage || 1)] || STAGES[15];
+    return {
+      gapAnalysis: {
+        achieved: observations.slice(0, 3).map((o: any) => o.observation),
+        needsAttention: followUps.length === 0 ? ["এখনো প্রথম ফলো-আপ রেকর্ড যুক্ত হয়নি।"] : [],
+        unknownInfo: [!contact.phone ? "ফোন নম্বর রেকর্ড করা হয়নি" : "", !contact.area ? "এলাকা উল্লেখ নেই" : ""].filter(Boolean),
+        nextSteps: [`${contact.name}-এর সাথে সৌজন্যমূলক খোঁজখবর নিন ও পরবর্তী প্রোগ্রামে আমন্ত্রণ জানান।`],
+      },
+      dawahGuidance: {
+        nextStage,
+        topicToDiscuss: "নামাজের গুরুত্ব ও দ্বীনি পরিবেশে যুক্ত থাকার উপকারিতা",
+        adviceOrInvitation: `${contact.name}-কে আন্তরিকভাবে মসজিদ ও সপ্তাহের ইলমি আলোচনায় আসার দাওয়াত দিন।`,
+        activityToEncourage: "ফজর ও মাগরিবে জামাতে উপস্থিত থাকার চেষ্টা",
+        followUpQuestions: ["বাসা ও কাজের ব্যস্ততা কেমন যাচ্ছে?", "কোন সময় আমাদের বসা সহজ হবে?"],
+        practicalNextAction: "আগামী ২-৩ দিনের মধ্যে ছোট একটি কল বা সরাসরি সাক্ষাৎ",
+      },
+    };
+  };
+
+  if (!resolveGeminiApiKey()) {
+    return buildFallback();
+  }
 
   const systemInstruction = `You are a wise, gentle, and respectful Dawah mentor for Kotbari Dawah Movement.
 Analyze the member's recorded information and generate:
@@ -530,13 +623,15 @@ Generate structured Gap Analysis and Personalized Dawah Guidance in Bengali.`;
 
   let response: any;
   try {
-    response = await ai.models.generateContent({
-      model: "gemini-4-hydrogen",
-      contents: prompt,
-    config: {
-      systemInstruction,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
-      responseMimeType: "application/json",
+    const ai = getAiClient();
+    response = await withTimeout(
+      ai.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+          responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -573,26 +668,13 @@ Generate structured Gap Analysis and Personalized Dawah Guidance in Bengali.`;
         required: ["gapAnalysis", "dawahGuidance"],
       },
     },
-  });
+      }),
+      20000,
+      "গ্যাপ অ্যানালাইসিস"
+    );
   } catch (err: any) {
     console.warn("[AI Gap Guidance Fallback] Gemini unavailable, using deterministic guidance:", err?.message || err);
-    const nextStage = STAGES[Math.min(15, contact.currentStage || 1)] || STAGES[15];
-    return {
-      gapAnalysis: {
-        achieved: observations.slice(0, 3).map((o: any) => o.observation),
-        needsAttention: followUps.length === 0 ? ["এখনো প্রথম ফলো-আপ রেকর্ড যুক্ত হয়নি।"] : [],
-        unknownInfo: [!contact.phone ? "ফোন নম্বর রেকর্ড করা হয়নি" : "", !contact.area ? "এলাকা উল্লেখ নেই" : ""].filter(Boolean),
-        nextSteps: [`${contact.name}-এর সাথে সৌজন্যমূলক খোঁজখবর নিন ও পরবর্তী প্রোগ্রামে আমন্ত্রণ জানান।`],
-      },
-      dawahGuidance: {
-        nextStage,
-        topicToDiscuss: "নামাজের গুরুত্ব ও দ্বীনি পরিবেশে যুক্ত থাকার উপকারিতা",
-        adviceOrInvitation: `${contact.name}-কে আন্তরিকভাবে মসজিদ ও সপ্তাহের ইলমি আলোচনায় আসার দাওয়াত দিন।`,
-        activityToEncourage: "ফজর ও মাগরিবে জামাতে উপস্থিত থাকার চেষ্টা",
-        followUpQuestions: ["বাসা ও কাজের ব্যস্ততা কেমন যাচ্ছে?", "কোন সময় আমাদের বসা সহজ হবে?"],
-        practicalNextAction: "আগামী ২-৩ দিনের মধ্যে ছোট একটি কল বা সরাসরি সাক্ষাৎ",
-      },
-    };
+    return buildFallback();
   }
 
   const parsed = JSON.parse((response.text ?? "{}").trim());
@@ -689,7 +771,7 @@ export async function refineCareRadarWording(params: {
   defaultReason: string;
   defaultAction: string;
 }): Promise<z.infer<typeof careRefinementSchema> | null> {
-  if (!process.env.GEMINI_API_KEY) return null;
+  if (!resolveGeminiApiKey()) return null;
   try {
     const ai = getAiClient();
     const prompt = `সদস্য: ${params.memberName} (ধাপ ${params.currentStage}/16)
@@ -771,7 +853,7 @@ export async function analyzeVoiceForMyTrack(params: {
     };
   };
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!resolveGeminiApiKey()) {
     return fallback();
   }
 

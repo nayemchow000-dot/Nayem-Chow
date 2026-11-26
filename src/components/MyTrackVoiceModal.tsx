@@ -109,19 +109,28 @@ export default function MyTrackVoiceModal({
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
+        if (mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.requestData?.();
+        }
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
       } catch {
-        // ignore
+        try {
+          mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+        } catch {
+          // ignore
+        }
       }
     }
     setIsRecording(false);
   };
 
   const transcribePayload = async (b64: string, mime: string) => {
-    if (!b64) return;
+    if (!b64) {
+      setError('অডিও ডাটা প্রস্তুত হয়নি। অনুগ্রহ করে আবার রেকর্ড করুন বা অডিও ফাইল আপলোড করুন।');
+      return;
+    }
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 25000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
       setTranscribing(true);
       setError(null);
@@ -186,7 +195,14 @@ export default function MyTrackVoiceModal({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
       const chosenType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
-      const recorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+      let recorder: MediaRecorder;
+      try {
+        recorder = chosenType
+          ? new MediaRecorder(stream, { mimeType: chosenType, audioBitsPerSecond: 32000 })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 32000 });
+      } catch {
+        recorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+      }
 
       liveTranscriptRef.current = '';
       const existingBeforeStart = transcription.trim();
@@ -225,15 +241,21 @@ export default function MyTrackVoiceModal({
 
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = () => {
-        const mime = (recorder.mimeType || 'audio/webm').split(';')[0];
+        const mime = (recorder.mimeType || chosenType || 'audio/webm').split(';')[0];
         const blob = new Blob(chunksRef.current, { type: mime });
+        stream.getTracks().forEach((t) => t.stop());
+
+        if (blob.size < 100) {
+          setError('কোনো অডিও রেকর্ড হয়নি। অনুগ্রহ করে অন্তত ১-২ সেকেন্ড কথা বলুন অথবা অডিও ফাইল আপলোড করুন।');
+          return;
+        }
+
         setAudioMimeType(mime);
         setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach((t) => t.stop());
 
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -248,7 +270,7 @@ export default function MyTrackVoiceModal({
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
       setIsRecording(true);
       setRecordingSeconds(0);
       timerRef.current = window.setInterval(() => {

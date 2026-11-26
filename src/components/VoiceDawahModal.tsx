@@ -141,19 +141,28 @@ export default function VoiceDawahModal({
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
+        if (mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.requestData?.();
+        }
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
       } catch {
-        // ignore
+        try {
+          mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+        } catch {
+          // ignore
+        }
       }
     }
     setIsRecording(false);
   };
 
   const transcribeAudioPayload = async (b64: string, mime: string) => {
-    if (!b64) return;
+    if (!b64) {
+      setError('অডিও ডাটা প্রস্তুত হয়নি। অনুগ্রহ করে আবার রেকর্ড করুন বা অডিও ফাইল আপলোড করুন।');
+      return;
+    }
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 25000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
       setTranscribing(true);
       setError(null);
@@ -221,7 +230,14 @@ export default function VoiceDawahModal({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
       const chosenType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
-      const recorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+      let recorder: MediaRecorder;
+      try {
+        recorder = chosenType
+          ? new MediaRecorder(stream, { mimeType: chosenType, audioBitsPerSecond: 32000 })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 32000 });
+      } catch {
+        recorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+      }
 
       liveTranscriptRef.current = '';
       const existingBeforeStart = editedTranscription.trim();
@@ -264,15 +280,21 @@ export default function VoiceDawahModal({
 
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = async () => {
-        const mime = (recorder.mimeType || 'audio/webm').split(';')[0];
+        const mime = (recorder.mimeType || chosenType || 'audio/webm').split(';')[0];
         const blob = new Blob(chunksRef.current, { type: mime });
+        stream.getTracks().forEach((t) => t.stop());
+
+        if (blob.size < 100) {
+          setError('কোনো অডিও রেকর্ড হয়নি। অনুগ্রহ করে অন্তত ১-২ সেকেন্ড কথা বলুন অথবা অডিও ফাইল আপলোড করুন।');
+          return;
+        }
+
         setAudioMimeType(mime);
         setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach((t) => t.stop());
 
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -293,7 +315,7 @@ export default function VoiceDawahModal({
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
       setIsRecording(true);
       setRecordingSeconds(0);
       timerRef.current = window.setInterval(() => {
@@ -317,7 +339,10 @@ export default function VoiceDawahModal({
   };
 
   const handleTranscribeAudio = async () => {
-    if (!audioBase64) return;
+    if (!audioBase64) {
+      setError('প্রথমে ভয়েস রেকর্ড করুন অথবা অডিও ফাইল আপলোড করুন।');
+      return;
+    }
     await transcribeAudioPayload(audioBase64, audioMimeType);
   };
 
@@ -551,9 +576,14 @@ export default function VoiceDawahModal({
                 <label className="text-xs font-medium text-[#8EA39A]">
                   ২. বাংলা ট্রান্সক্রিপশন (বিশ্লেষণের আগে সম্পাদনা করতে পারবেন)
                 </label>
-                {step === 'transcribed' && (
+                {transcribing ? (
+                  <span className="text-[11px] text-[#34D399] flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    বাংলায় রূপান্তর হচ্ছে...
+                  </span>
+                ) : step === 'transcribed' ? (
                   <span className="text-[11px] text-[#34D399]">ট্রান্সক্রিপশন সম্পন্ন</span>
-                )}
+                ) : null}
               </div>
               <textarea
                 rows={4}
