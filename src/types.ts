@@ -232,10 +232,31 @@ export interface MemberDailyReport {
   contactId?: string | null;
   reportDate: string;
   items: Record<string, boolean>;
+  itemMinutes?: Record<string, number>;
+  totalProductiveMinutes?: number;
   note?: string | null;
   status: 'draft' | 'submitted' | 'skipped';
   wasSharedAtSubmit?: boolean;
   submittedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ScreenTimeDataSource =
+  | 'manual'
+  | 'android_usage_access'
+  | 'ios_screen_time'
+  | 'companion_sync';
+
+export interface ScreenTimeRecord {
+  id: string;
+  memberAccountId: string;
+  contactId?: string | null;
+  recordDate: string;
+  minutes: number;
+  dataSource: ScreenTimeDataSource;
+  wasSharedAtSubmit?: boolean;
+  note?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -266,7 +287,16 @@ export interface MemberSharingSettings {
   shareDawahActivities: boolean;
   sharePersonalNotes: boolean;
   shareWeeklySummary: boolean;
+  shareProductiveTime: boolean;
+  shareScreenTime: boolean;
   updatedAt: string;
+}
+
+export interface AssignedResponsibleWorker {
+  id: string;
+  name: string;
+  username: string;
+  phone?: string | null;
 }
 
 export type CareUrgency = 'urgent' | 'soon' | 'ok';

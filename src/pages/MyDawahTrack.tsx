@@ -45,24 +45,33 @@ import {
 } from '../types';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '../components/ui';
 import MyTrackVoiceModal from '../components/MyTrackVoiceModal';
+import TimePickerSheet from '../components/TimePickerSheet';
+import {
+  getDhakaDateStr,
+  getDhakaClockParts,
+  formatMinutesBn,
+  formatMinutesCompactBn,
+  computeProductiveMinutes,
+  toBanglaDigits,
+} from '../lib/dhakaTime';
 
-type TrackTab = 'today' | 'weekly' | 'monthly' | 'dawah' | 'notes' | 'reminders' | 'privacy';
+export type TrackTab = 'today' | 'weekly' | 'monthly' | 'dawah' | 'notes' | 'reminders' | 'privacy';
 
-function formatDateOffset(offset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().split('T')[0];
-}
-
-export default function MyDawahTrack() {
+export default function MyDawahTrack({ initialTab }: { initialTab?: TrackTab } = {}) {
   const { user, featureFlags } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TrackTab>('today');
+  const [activeTab, setActiveTab] = useState<TrackTab>(() => {
+    const t = searchParams.get('tab') as TrackTab | null;
+    if (t && ['today', 'weekly', 'monthly', 'dawah', 'notes', 'reminders', 'privacy'].includes(t)) {
+      return t;
+    }
+    return initialTab || 'today';
+  });
   const [voiceTrackOpen, setVoiceTrackOpen] = useState(false);
 
-  // Today / Yesterday date toggle
-  const todayStr = formatDateOffset(0);
-  const yesterdayStr = formatDateOffset(-1);
+  // Today / Yesterday date toggle strictly in Asia/Dhaka
+  const todayStr = getDhakaDateStr(0);
+  const yesterdayStr = getDhakaDateStr(-1);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
 
   // Today tab state
@@ -70,6 +79,8 @@ export default function MyDawahTrack() {
   const [trackerItems, setTrackerItems] = useState<TrackerItem[]>([]);
   const [report, setReport] = useState<MemberDailyReport | null>(null);
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
+  const [itemMinutesMap, setItemMinutesMap] = useState<Record<string, number>>({});
+  const [timePickerItem, setTimePickerItem] = useState<TrackerItem | null>(null);
   const [noteInput, setNoteInput] = useState('');
   const [salahRecord, setSalahRecord] = useState<any>(null);
   const [streak, setStreak] = useState(0);
@@ -115,6 +126,7 @@ export default function MyDawahTrack() {
         setTrackerItems(Array.isArray(data.trackerItems) ? data.trackerItems : []);
         setReport(data.report || null);
         setCheckedMap(data.report?.items || {});
+        setItemMinutesMap(data.report?.itemMinutes || {});
         setNoteInput(data.report?.note || '');
         setSalahRecord(data.salahRecord || null);
         setStreak(data.streak || 0);
@@ -139,6 +151,15 @@ export default function MyDawahTrack() {
   useEffect(() => {
     fetchReminders();
   }, [fetchReminders]);
+
+  useEffect(() => {
+    const t = searchParams.get('tab') as TrackTab | null;
+    if (t && ['today', 'weekly', 'monthly', 'dawah', 'notes', 'reminders', 'privacy'].includes(t)) {
+      setActiveTab(t);
+    } else if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, searchParams]);
 
   useEffect(() => {
     if (searchParams.get('voice') === '1') {
@@ -203,6 +224,7 @@ export default function MyDawahTrack() {
         body: JSON.stringify({
           reportDate: selectedDate,
           items: nextMap,
+          itemMinutes: itemMinutesMap,
           note: noteInput,
         }),
       });
@@ -215,6 +237,42 @@ export default function MyDawahTrack() {
     }
   };
 
+  const handleSaveItemTime = async (
+    item: TrackerItem,
+    minutes: number | null,
+    alsoCheck?: boolean
+  ) => {
+    const nextMinutes = { ...itemMinutesMap };
+    if (minutes && minutes > 0) {
+      nextMinutes[item.key] = minutes;
+    } else {
+      delete nextMinutes[item.key];
+    }
+    const nextItems = alsoCheck ? { ...checkedMap, [item.key]: true } : checkedMap;
+    setItemMinutesMap(nextMinutes);
+    if (alsoCheck) setCheckedMap(nextItems);
+
+    const res = await apiFetch('/api/my-track/today', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reportDate: selectedDate,
+        items: nextItems,
+        itemMinutes: nextMinutes,
+        note: noteInput,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setReport(data.report);
+      showToast(
+        minutes
+          ? `${item.banglaLabel}: ${formatMinutesBn(minutes)} সংরক্ষিত হয়েছে।`
+          : `${item.banglaLabel}-এর সময় মুছে ফেলা হয়েছে।`
+      );
+    }
+  };
+
   const handleSubmitReport = async (status: 'submitted' | 'skipped') => {
     try {
       setSubmittingReport(true);
@@ -224,6 +282,7 @@ export default function MyDawahTrack() {
         body: JSON.stringify({
           reportDate: selectedDate,
           items: checkedMap,
+          itemMinutes: itemMinutesMap,
           note: noteInput,
           status,
         }),
@@ -356,10 +415,11 @@ export default function MyDawahTrack() {
     }
   };
 
-  // Calculations for Today SVG Progress Ring
+  // Calculations for Today SVG Progress Ring & Productive Time
   const totalCount = trackerItems.length;
   const completedCount = trackerItems.filter((it) => Boolean(checkedMap[it.key])).length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const liveProductiveMinutes = computeProductiveMinutes(checkedMap, itemMinutesMap);
   const radius = 38;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (pct / 100) * circumference;
@@ -367,11 +427,8 @@ export default function MyDawahTrack() {
   const amalItems = trackerItems.filter((t) => t.group === 'amal');
   const dawahItems = trackerItems.filter((t) => t.group === 'dawah');
 
-  // Check if any active reminder time has passed today and report is not submitted
-  const nowHHMM = `${String(new Date().getHours()).padStart(2, '0')}:${String(
-    new Date().getMinutes()
-  ).padStart(2, '0')}`;
-  const todayDay = new Date().getDay();
+  // Check if any active reminder time has passed today in Asia/Dhaka and report is not submitted
+  const { hhmm: nowHHMM, dayOfWeek: todayDay } = getDhakaClockParts();
   const dueReminder =
     selectedDate === todayStr &&
     report?.status !== 'submitted' &&
@@ -544,8 +601,19 @@ export default function MyDawahTrack() {
                   দৈনিক আমল ও দাওয়াহ চেকলিস্ট
                 </h2>
                 <p className="text-xs text-[#8EA39A]">
-                  প্রতিটি ট্যাপে স্বয়ংক্রিয়ভাবে সেভ হয়। আজ এবং গতকালের রিপোর্ট সম্পাদনা করা যাবে।
+                  কাজের পাশে <Clock className="w-3 h-3 inline text-[#34D399]" /> বাটনে ট্যাপ করে সময় যোগ করুন — কেবল সম্পন্ন আমলের সময় Productive Time-এ যুক্ত হয়।
                 </p>
+                <div className="pt-1 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-full bg-[#34D399]/15 border border-[#34D399]/35 text-[#B6F5D8] font-medium tabular-nums">
+                    আজকের Productive Time: {formatMinutesBn(liveProductiveMinutes)}
+                  </span>
+                  <Link
+                    to="/my-time"
+                    className="text-[11px] text-[#F4A85E] hover:underline"
+                  >
+                    স্ক্রিন টাইম ও বিশ্লেষণ →
+                  </Link>
+                </div>
               </div>
             </div>
 
@@ -600,24 +668,45 @@ export default function MyDawahTrack() {
                 <CardContent className="pt-4 space-y-2.5">
                   {amalItems.map((item) => {
                     const checked = Boolean(checkedMap[item.key]);
+                    const mins = itemMinutesMap[item.key] || null;
                     return (
-                      <button
+                      <div
                         key={item.id}
-                        type="button"
-                        onClick={() => handleToggleItem(item.key)}
-                        className={`w-full text-left p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                        className={`p-2.5 sm:p-3 rounded-2xl border flex items-center justify-between gap-2.5 transition-all ${
                           checked
                             ? 'bg-[#34D399]/14 border-[#34D399]/40 text-[#EDF4F0]'
                             : 'glass-2 hover:border-white/25 text-[#EDF4F0]/85'
                         }`}
                       >
-                        <span className="text-sm font-medium">{item.banglaLabel}</span>
-                        {checked ? (
-                          <CheckCircle2 className="w-5 h-5 text-[#34D399] shrink-0" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-[#5D726A] shrink-0" />
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleItem(item.key)}
+                          className="flex-1 min-h-[42px] flex items-center gap-2.5 text-left"
+                        >
+                          {checked ? (
+                            <CheckCircle2 className="w-5 h-5 text-[#34D399] shrink-0" />
+                          ) : (
+                            <Circle className="w-5 h-5 text-[#5D726A] shrink-0" />
+                          )}
+                          <span className="text-sm font-medium">{item.banglaLabel}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setTimePickerItem(item)}
+                          title="এই কাজের সময় নির্ধারণ করুন"
+                          className={`min-h-[36px] px-2.5 py-1 rounded-xl border text-[11px] font-medium flex items-center gap-1 shrink-0 transition-colors tabular-nums ${
+                            mins && checked
+                              ? 'bg-[#34D399]/20 border-[#34D399]/40 text-[#B6F5D8]'
+                              : mins && !checked
+                              ? 'bg-white/[0.03] border-white/10 text-[#8EA39A] line-through'
+                              : 'bg-white/[0.04] border-white/15 hover:border-[#34D399]/40 text-[#8EA39A] hover:text-[#EDF4F0]'
+                          }`}
+                        >
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span>{mins ? formatMinutesCompactBn(mins) : '+ সময়'}</span>
+                        </button>
+                      </div>
                     );
                   })}
                 </CardContent>
@@ -634,24 +723,45 @@ export default function MyDawahTrack() {
                 <CardContent className="pt-4 space-y-2.5">
                   {dawahItems.map((item) => {
                     const checked = Boolean(checkedMap[item.key]);
+                    const mins = itemMinutesMap[item.key] || null;
                     return (
-                      <button
+                      <div
                         key={item.id}
-                        type="button"
-                        onClick={() => handleToggleItem(item.key)}
-                        className={`w-full text-left p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                        className={`p-2.5 sm:p-3 rounded-2xl border flex items-center justify-between gap-2.5 transition-all ${
                           checked
                             ? 'bg-[#34D399]/14 border-[#34D399]/40 text-[#EDF4F0]'
                             : 'glass-2 hover:border-white/25 text-[#EDF4F0]/85'
                         }`}
                       >
-                        <span className="text-sm font-medium">{item.banglaLabel}</span>
-                        {checked ? (
-                          <CheckCircle2 className="w-5 h-5 text-[#34D399] shrink-0" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-[#5D726A] shrink-0" />
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleItem(item.key)}
+                          className="flex-1 min-h-[42px] flex items-center gap-2.5 text-left"
+                        >
+                          {checked ? (
+                            <CheckCircle2 className="w-5 h-5 text-[#34D399] shrink-0" />
+                          ) : (
+                            <Circle className="w-5 h-5 text-[#5D726A] shrink-0" />
+                          )}
+                          <span className="text-sm font-medium">{item.banglaLabel}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setTimePickerItem(item)}
+                          title="এই কাজের সময় নির্ধারণ করুন"
+                          className={`min-h-[36px] px-2.5 py-1 rounded-xl border text-[11px] font-medium flex items-center gap-1 shrink-0 transition-colors tabular-nums ${
+                            mins && checked
+                              ? 'bg-[#34D399]/20 border-[#34D399]/40 text-[#B6F5D8]'
+                              : mins && !checked
+                              ? 'bg-white/[0.03] border-white/10 text-[#8EA39A] line-through'
+                              : 'bg-white/[0.04] border-white/15 hover:border-[#34D399]/40 text-[#8EA39A] hover:text-[#EDF4F0]'
+                          }`}
+                        >
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span>{mins ? formatMinutesCompactBn(mins) : '+ সময়'}</span>
+                        </button>
+                      </div>
                     );
                   })}
                 </CardContent>
@@ -741,29 +851,47 @@ export default function MyDawahTrack() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
                 <div className="glass rounded-[20px] p-4">
                   <div className="text-xs text-[#8EA39A]">গড় সম্পূর্ণতা</div>
                   <div className="text-2xl font-serif italic text-[#34D399] mt-1 tabular-nums">
-                    {summaryData.avgCompletionPct}%
+                    {toBanglaDigits(summaryData.avgCompletionPct)}%
                   </div>
                 </div>
                 <div className="glass rounded-[20px] p-4">
                   <div className="text-xs text-[#8EA39A]">জমাকৃত দিন</div>
                   <div className="text-2xl font-serif italic text-[#EDF4F0] mt-1 tabular-nums">
-                    {summaryData.submittedDays}/{summaryData.daysCount}
+                    {toBanglaDigits(summaryData.submittedDays)}/{toBanglaDigits(summaryData.daysCount)}
                   </div>
                 </div>
                 <div className="glass rounded-[20px] p-4">
                   <div className="text-xs text-[#8EA39A]">বর্তমান স্ট্রিক</div>
                   <div className="text-2xl font-serif italic text-[#F4A85E] mt-1 tabular-nums">
-                    {streak} দিন
+                    {toBanglaDigits(streak)} দিন
                   </div>
                 </div>
                 <div className="glass rounded-[20px] p-4">
                   <div className="text-xs text-[#8EA39A]">দাওয়াহ লগ</div>
                   <div className="text-2xl font-serif italic text-[#B6F5D8] mt-1 tabular-nums">
-                    {summaryData.dawahLogsCount}টি
+                    {toBanglaDigits(summaryData.dawahLogsCount)}টি
+                  </div>
+                </div>
+                <div className="glass rounded-[20px] p-4">
+                  <div className="text-xs text-[#8EA39A]">
+                    {activeTab === 'weekly' ? 'সাপ্তাহিক Productive' : 'মাসিক Productive'}
+                  </div>
+                  <div className="text-lg sm:text-xl font-serif italic text-[#34D399] mt-1 tabular-nums">
+                    {formatMinutesBn(
+                      activeTab === 'weekly'
+                        ? summaryData.productiveSummary?.weekMinutes || 0
+                        : summaryData.productiveSummary?.monthMinutes || 0
+                    )}
+                  </div>
+                </div>
+                <div className="glass rounded-[20px] p-4">
+                  <div className="text-xs text-[#8EA39A]">দৈনিক গড় Productive</div>
+                  <div className="text-lg sm:text-xl font-serif italic text-[#B6F5D8] mt-1 tabular-nums">
+                    {formatMinutesBn(summaryData.productiveSummary?.dailyAverageMinutes || 0)}
                   </div>
                 </div>
               </div>
@@ -1133,6 +1261,16 @@ export default function MyDawahTrack() {
                           desc: 'প্রতিদিন কোন আমল ও দাওয়াহ আইটেম সম্পন্ন হয়েছে',
                         },
                         {
+                          key: 'shareProductiveTime' as const,
+                          label: 'প্রোডাক্টিভ টাইম (Productive Time) শেয়ার করুন',
+                          desc: 'দৈনিক/সাপ্তাহিক/মাসিক আমল ও দাওয়াহর সময়',
+                        },
+                        {
+                          key: 'shareScreenTime' as const,
+                          label: 'মোবাইল স্ক্রিন টাইম (Screen Time) শেয়ার করুন',
+                          desc: 'দৈনিক মোবাইল ব্যবহারের সময় ও সাপ্তাহিক গড়',
+                        },
+                        {
                           key: 'shareDawahActivities' as const,
                           label: 'আমার দাওয়াহ কার্যক্রম শেয়ার করুন',
                           desc: 'My Dawah Activities ট্যাবের বিবরণ',
@@ -1225,6 +1363,7 @@ export default function MyDawahTrack() {
             body: JSON.stringify({
               reportDate: selectedDate,
               items: mergedItems,
+              itemMinutes: itemMinutesMap,
               note: nextNote,
             }),
           });
@@ -1244,6 +1383,21 @@ export default function MyDawahTrack() {
 
           await fetchToday(selectedDate);
           showToast('AI ভয়েস আপডেট সফলভাবে আপনার ট্র্যাকে যুক্ত হয়েছে!');
+        }}
+      />
+
+      <TimePickerSheet
+        open={Boolean(timePickerItem)}
+        onOpenChange={(o) => {
+          if (!o) setTimePickerItem(null);
+        }}
+        activityLabel={timePickerItem?.banglaLabel || ''}
+        currentMinutes={timePickerItem ? itemMinutesMap[timePickerItem.key] || null : null}
+        isChecked={timePickerItem ? Boolean(checkedMap[timePickerItem.key]) : false}
+        onSave={async (mins, alsoCheck) => {
+          if (timePickerItem) {
+            await handleSaveItemTime(timePickerItem, mins, alsoCheck);
+          }
         }}
       />
     </div>

@@ -210,6 +210,8 @@ export const memberDailyReports = pgTable('member_daily_reports', {
   contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
   reportDate: date('report_date').notNull(),
   items: jsonb('items').$type<Record<string, boolean>>().default({}).notNull(),
+  itemMinutes: jsonb('item_minutes').$type<Record<string, number>>().default({}).notNull(),
+  totalProductiveMinutes: integer('total_productive_minutes').default(0).notNull(),
   note: text('note'),
   status: text('status').default('draft').notNull(), // 'draft' | 'submitted' | 'skipped'
   wasSharedAtSubmit: boolean('was_shared_at_submit').default(false).notNull(),
@@ -218,6 +220,21 @@ export const memberDailyReports = pgTable('member_daily_reports', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
   uniqueIndex('member_daily_reports_acc_date_idx').on(t.memberAccountId, t.reportDate),
+]);
+
+export const memberScreenTimeRecords = pgTable('member_screen_time_records', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  memberAccountId: uuid('member_account_id').references(() => memberAccounts.id, { onDelete: 'cascade' }).notNull(),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  recordDate: date('record_date').notNull(),
+  minutes: integer('minutes').default(0).notNull(),
+  dataSource: text('data_source').default('manual').notNull(), // 'manual' | 'android_usage_access' | 'ios_screen_time' | 'companion_sync'
+  wasSharedAtSubmit: boolean('was_shared_at_submit').default(false).notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('member_screen_time_acc_date_idx').on(t.memberAccountId, t.recordDate),
 ]);
 
 export const memberDawahLogs = pgTable('member_dawah_logs', {
@@ -245,6 +262,8 @@ export const memberSharingSettings = pgTable('member_sharing_settings', {
   shareDawahActivities: boolean('share_dawah_activities').default(false).notNull(),
   sharePersonalNotes: boolean('share_personal_notes').default(false).notNull(),
   shareWeeklySummary: boolean('share_weekly_summary').default(false).notNull(),
+  shareProductiveTime: boolean('share_productive_time').default(false).notNull(),
+  shareScreenTime: boolean('share_screen_time').default(false).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 

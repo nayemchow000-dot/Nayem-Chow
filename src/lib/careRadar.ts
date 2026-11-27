@@ -17,6 +17,7 @@ import { eq, desc, inArray } from 'drizzle-orm';
 import type { CareChannel, CareUrgency, CareTask } from '../types';
 import { STAGES } from '../types';
 import { refineCareRadarWording } from './ai';
+import { getDhakaDateStr } from './dhakaTime';
 
 export interface CareSignalResult {
   key: string;
@@ -90,7 +91,7 @@ export async function recomputeCareForContact(
   options?: { allowAiRefinement?: boolean; minCycleNo?: number }
 ): Promise<{ snapshot: any; openTasks: CareTask[] }> {
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getDhakaDateStr(0, now);
 
   const [contactRows, thresholds] = await Promise.all([
     db.select().from(contacts).where(eq(contacts.id, contactId)),
@@ -275,7 +276,7 @@ export async function recomputeCareForContact(
   // 8. Consent-gated Self Report Signals (ONLY when monitoringEnabled === true!)
   if (linkedAccountId && sharing?.monitoringEnabled) {
     if (sharing.shareWeeklySummary || sharing.shareDailyAmal) {
-      const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const fiveDaysAgo = getDhakaDateStr(-5, now);
       const recentReports = await db
         .select()
         .from(memberDailyReports)
@@ -513,7 +514,7 @@ export async function completeCareTaskAndGenerateNext(
 
   const cleanOutcome = outcome.trim() || 'সম্পন্ন করা হয়েছে';
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getDhakaDateStr(0, now);
 
   const updated = await db
     .update(careTasks)

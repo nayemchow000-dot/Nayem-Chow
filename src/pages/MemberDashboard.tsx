@@ -9,6 +9,7 @@ import {
 import { Link } from 'react-router';
 import { apiFetch } from '../lib/api';
 import VoiceDawahModal from '../components/VoiceDawahModal';
+import { getDhakaDateStr, formatMinutesBn } from '../lib/dhakaTime';
 
 export default function MemberDashboard() {
   const { user, refreshUser, updatePrivacy, updateProfile } = useAuth();
@@ -47,6 +48,8 @@ export default function MemberDashboard() {
   // Password modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [assignedResponsibles, setAssignedResponsibles] = useState<Array<{ id: string; name: string; phone?: string | null }>>([]);
+  const [homeStats, setHomeStats] = useState<{ productiveMinutes: number; screenMinutes: number | null } | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -70,6 +73,18 @@ export default function MemberDashboard() {
       if (user.contactId) {
         fetchTodaySalah(user.contactId);
       }
+      apiFetch('/api/my-home/overview')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((ov) => {
+          if (ov) {
+            setAssignedResponsibles(Array.isArray(ov.assignedResponsibles) ? ov.assignedResponsibles : []);
+            setHomeStats({
+              productiveMinutes: ov.todayProductiveMinutes || 0,
+              screenMinutes: ov.todayScreenTime?.minutes ?? null,
+            });
+          }
+        })
+        .catch(() => {});
     }
   }, [user]);
 
@@ -78,7 +93,7 @@ export default function MemberDashboard() {
       const res = await apiFetch(`/api/contacts/${contactId}/salah`);
       if (res.ok) {
         const records = await res.json();
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getDhakaDateStr(0);
         const record = records.find((r: any) => r.date === todayStr);
         if (record) {
           setTodaySalah({
@@ -102,7 +117,7 @@ export default function MemberDashboard() {
 
     try {
       setSavingSalah(true);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getDhakaDateStr(0);
       await apiFetch(`/api/contacts/${user.contactId}/salah`, {
         method: 'POST',
         headers: {
@@ -338,6 +353,27 @@ export default function MemberDashboard() {
               </div>
             </div>
           )}
+
+          <div className="mt-4 pt-4 border-t border-white/[0.08] space-y-2 text-xs">
+            <div className="text-[#8EA39A] font-medium">নির্ধারিত দাওয়াহ কর্মী / দায়িত্বশীল:</div>
+            {assignedResponsibles.length === 0 ? (
+              <div className="text-[#8EA39A]">কোটবাড়ি অ্যাডমিন টিম</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {assignedResponsibles.map((r) => (
+                  <span key={r.id} className="px-2.5 py-1 rounded-xl glass-2 text-[#B6F5D8]">
+                    {r.name} {r.phone ? `· ${r.phone}` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+            {homeStats && (
+              <div className="flex flex-wrap gap-3 pt-1 text-[11px] text-[#8EA39A] tabular-nums">
+                <span>আজ Productive: <strong className="text-[#34D399]">{formatMinutesBn(homeStats.productiveMinutes)}</strong></span>
+                <span>আজ Screen Time: <strong className="text-[#F4A85E]">{homeStats.screenMinutes !== null ? formatMinutesBn(homeStats.screenMinutes) : 'লগ বাকি'}</strong></span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Today's Salah Tracker */}

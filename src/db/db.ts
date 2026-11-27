@@ -236,6 +236,23 @@ export const ensureAiTables = async () => {
       is_active boolean NOT NULL DEFAULT true,
       created_at timestamp NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE member_daily_reports ADD COLUMN IF NOT EXISTS item_minutes jsonb NOT NULL DEFAULT '{}'::jsonb`,
+    `ALTER TABLE member_daily_reports ADD COLUMN IF NOT EXISTS total_productive_minutes integer NOT NULL DEFAULT 0`,
+    `ALTER TABLE member_sharing_settings ADD COLUMN IF NOT EXISTS share_productive_time boolean NOT NULL DEFAULT false`,
+    `ALTER TABLE member_sharing_settings ADD COLUMN IF NOT EXISTS share_screen_time boolean NOT NULL DEFAULT false`,
+    `CREATE TABLE IF NOT EXISTS member_screen_time_records (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      member_account_id uuid NOT NULL REFERENCES member_accounts(id) ON DELETE CASCADE,
+      contact_id uuid REFERENCES contacts(id) ON DELETE SET NULL,
+      record_date date NOT NULL,
+      minutes integer NOT NULL DEFAULT 0,
+      data_source text NOT NULL DEFAULT 'manual',
+      was_shared_at_submit boolean NOT NULL DEFAULT false,
+      note text,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS member_screen_time_acc_date_idx ON member_screen_time_records(member_account_id, record_date)`,
   ];
 
   for (const sql of statements) {

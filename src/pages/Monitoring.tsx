@@ -14,6 +14,7 @@ import {
 import { apiFetch } from '../lib/api';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '../components/ui';
 import CareRadarBell from '../components/CareRadarBell';
+import { formatMinutesCompactBn, formatMinutesBn, toBanglaDigits } from '../lib/dhakaTime';
 
 export default function Monitoring() {
   const [loading, setLoading] = useState(true);
@@ -170,9 +171,23 @@ export default function Monitoring() {
                       {rep.contactId && <CareRadarBell contactId={rep.contactId} compact />}
                     </div>
 
-                    {rep.completedCount !== null && (
-                      <div className="text-xs text-[#B6F5D8] font-mono tabular-nums">
-                        সম্পন্ন আমল: {rep.completedCount}/{rep.totalCount}
+                    {(rep.completedCount !== null || rep.productiveMinutes !== null || rep.screenTimeMinutes !== null) && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums">
+                        {rep.completedCount !== null && (
+                          <span className="text-[#B6F5D8]">
+                            সম্পন্ন আমল: {toBanglaDigits(rep.completedCount)}/{toBanglaDigits(rep.totalCount)}
+                          </span>
+                        )}
+                        {rep.productiveMinutes !== null && rep.productiveMinutes !== undefined && (
+                          <span className="px-2 py-0.5 rounded-full bg-[#34D399]/15 text-[#34D399] text-[11px]">
+                            Productive: {formatMinutesCompactBn(rep.productiveMinutes)}
+                          </span>
+                        )}
+                        {rep.screenTimeMinutes !== null && rep.screenTimeMinutes !== undefined && (
+                          <span className="px-2 py-0.5 rounded-full bg-[#F4A85E]/15 text-[#F4A85E] text-[11px]">
+                            Screen: {formatMinutesCompactBn(rep.screenTimeMinutes)}
+                          </span>
+                        )}
                       </div>
                     )}
                     {rep.note && (
@@ -247,6 +262,8 @@ export default function Monitoring() {
                     <th className="py-2.5 px-3 text-center">ধাপ</th>
                     <th className="py-2.5 px-3 text-center">রিপোর্ট জমা</th>
                     <th className="py-2.5 px-3 text-right">গড় সম্পূর্ণতা</th>
+                    <th className="py-2.5 px-3 text-right">মোট Productive</th>
+                    <th className="py-2.5 px-3 text-right">গড় Screen Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.06]">
@@ -255,9 +272,21 @@ export default function Monitoring() {
                       <td className="py-2.5 px-3 font-medium text-[#EDF4F0]">{m.memberName}</td>
                       <td className="py-2.5 px-3 text-[#8EA39A]">{m.area}</td>
                       <td className="py-2.5 px-3 text-center font-mono tabular-nums">{m.currentStage}/16</td>
-                      <td className="py-2.5 px-3 text-center font-mono tabular-nums">{m.submittedDays} দিন</td>
+                      <td className="py-2.5 px-3 text-center font-mono tabular-nums">
+                        {m.submittedDays !== null && m.submittedDays !== undefined ? `${m.submittedDays} দিন` : '—'}
+                      </td>
                       <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#34D399] tabular-nums">
-                        {m.completionPct}%
+                        {m.completionPct !== null && m.completionPct !== undefined ? `${m.completionPct}%` : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-[#B6F5D8] tabular-nums">
+                        {m.totalProductiveMinutes !== null && m.totalProductiveMinutes !== undefined
+                          ? formatMinutesBn(m.totalProductiveMinutes)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-[#F4A85E] tabular-nums">
+                        {m.avgScreenTimeMinutes !== null && m.avgScreenTimeMinutes !== undefined
+                          ? formatMinutesBn(m.avgScreenTimeMinutes)
+                          : '—'}
                       </td>
                     </tr>
                   ))}

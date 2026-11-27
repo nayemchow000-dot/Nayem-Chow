@@ -6,6 +6,7 @@ import {
   salahRecords,
   trackerItems,
   memberDailyReports,
+  memberScreenTimeRecords,
   memberDawahLogs,
   memberNotes,
   memberSharingSettings,
@@ -24,26 +25,38 @@ import {
   canCareForContact,
   canAccessContact,
   getConsentedSelfReportForAdmin,
+  getAssignedResponsiblesForContact,
 } from './accessControl';
 import {
   recomputeCareForContact,
   completeCareTaskAndGenerateNext,
 } from './careRadar';
 import { analyzeVoiceForMyTrack } from './ai';
+import {
+  getDhakaDateStr,
+  formatDhakaDisplayDateBn,
+  computeProductiveMinutes,
+  sanitizeItemMinutes,
+} from './dhakaTime';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function getDateStr(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().split('T')[0];
+  return getDhakaDateStr(offsetDays);
 }
 
 function isDateEditableForMember(dateStr: string): boolean {
-  // Editable today and yesterday (until end of next day)
+  // Editable today and yesterday in Asia/Dhaka timezone
   const today = getDateStr(0);
   const yesterday = getDateStr(-1);
   return dateStr === today || dateStr === yesterday;
+}
+
+function isValidScreenTimeDateForMember(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const today = getDateStr(0);
+  const sevenDaysAgo = getDateStr(-6);
+  return dateStr >= sevenDaysAgo && dateStr <= today;
 }
 
 export const portalRouter = Router();
@@ -242,8 +255,18 @@ portalRouter.get('/my-track/today', async (req, res) => {
         : Promise.resolve([]),
     ]);
 
-    const todayReport = existingReports[0] || null;
-    // Compute current streak
+    const todayReport = existingReports[0]
+      ? {
+          ...existingReports[0],
+          itemMinutes: existingReports[0].itemMinutes || {},
+          totalProductiveMinutes: computeProductiveMinutes(
+            existingReports[0].items || {},
+            existingReports[0].itemMinutes || {}
+          ),
+        }
+      : null;
+
+    // Compute current streak in Asia/Dhaka
     let streak = 0;
     const submittedDates = new Set(recentReports.filter((r) => r.status === 'submitted').map((r) => r.reportDate));
     for (let offset = 0; offset < 35; offset++) {
@@ -259,6 +282,8 @@ portalRouter.get('/my-track/today', async (req, res) => {
 
     res.json({
       reportDate,
+      dhakaToday: getDateStr(0),
+      displayDateBn: formatDhakaDisplayDateBn(reportDate),
       editable: isDateEditableForMember(reportDate),
       trackerItems: itemsList,
       report: todayReport,
@@ -285,22 +310,30 @@ portalRouter.put('/my-track/today', async (req, res) => {
       return res.status(400).json({ error: 'শুধুমাত্র আজ ও গতকালের রিপোর্ট সম্পাদনা করা যাবে।' });
     }
 
-    const itemsInput = req.body?.items && typeof req.body.items === 'object' ? req.body.items : {};
-    const sanitizedItems: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(itemsInput)) {
-      sanitizedItems[String(k)] = Boolean(v);
-    }
-    const note = req.body?.note !== undefined ? (req.body.note ? String(req.body.note) : null) : undefined;
-
     const existing = await db
       .select()
       .from(memberDailyReports)
       .where(and(eq(memberDailyReports.memberAccountId, authUser.userId), eq(memberDailyReports.reportDate, reportDate)));
 
+    const itemsProvided = req.body?.items && typeof req.body.items === 'object';
+    const sanitizedItems: Record<string, boolean> = itemsProvided
+      ? Object.fromEntries(Object.entries(req.body.items).map(([k, v]) => [String(k), Boolean(v)]))
+      : (existing[0]?.items as Record<string, boolean>) || {};
+
+    const itemMinutesProvided = req.body?.itemMinutes && typeof req.body.itemMinutes === 'object';
+    const sanitizedItemMinutes: Record<string, number> = itemMinutesProvided
+      ? sanitizeItemMinutes(req.body.itemMinutes)
+      : sanitizeItemMinutes(existing[0]?.itemMinutes || {});
+
+    const totalProductiveMinutes = computeProductiveMinutes(sanitizedItems, sanitizedItemMinutes);
+    const note = req.body?.note !== undefined ? (req.body.note ? String(req.body.note) : null) : undefined;
+
     let saved;
     if (existing.length > 0) {
       const updateObj: any = {
         items: sanitizedItems,
+        itemMinutes: sanitizedItemMinutes,
+        totalProductiveMinutes,
         updatedAt: new Date(),
       };
       if (note !== undefined) updateObj.note = note;
@@ -318,6 +351,8 @@ portalRouter.put('/my-track/today', async (req, res) => {
           contactId: authUser.contactId,
           reportDate,
           items: sanitizedItems,
+          itemMinutes: sanitizedItemMinutes,
+          totalProductiveMinutes,
           note: note ?? null,
           status: 'draft',
         })
@@ -348,6 +383,7 @@ portalRouter.post('/my-track/report/submit', async (req, res) => {
 
     const status = req.body?.status === 'skipped' ? 'skipped' : 'submitted';
     const itemsInput = req.body?.items && typeof req.body.items === 'object' ? req.body.items : undefined;
+    const itemMinutesInput = req.body?.itemMinutes && typeof req.body.itemMinutes === 'object' ? req.body.itemMinutes : undefined;
     const note = req.body?.note !== undefined ? (req.body.note ? String(req.body.note) : null) : undefined;
 
     // Check current sharing consent to record snapshot flag cleanly
@@ -355,29 +391,40 @@ portalRouter.post('/my-track/report/submit', async (req, res) => {
       .select()
       .from(memberSharingSettings)
       .where(eq(memberSharingSettings.memberAccountId, authUser.userId));
-    const isSharingDailyNow = Boolean(shareRows[0]?.monitoringEnabled && shareRows[0]?.shareDailyAmal);
+    const isSharingDailyNow = Boolean(
+      shareRows[0]?.monitoringEnabled &&
+        (shareRows[0]?.shareDailyAmal || shareRows[0]?.shareProductiveTime)
+    );
 
     const existing = await db
       .select()
       .from(memberDailyReports)
       .where(and(eq(memberDailyReports.memberAccountId, authUser.userId), eq(memberDailyReports.reportDate, reportDate)));
 
-    const sanitizedItems: Record<string, boolean> = {};
-    if (itemsInput) {
-      for (const [k, v] of Object.entries(itemsInput)) {
-        sanitizedItems[String(k)] = Boolean(v);
-      }
-    }
+    const sanitizedItems: Record<string, boolean> = itemsInput
+      ? Object.fromEntries(Object.entries(itemsInput).map(([k, v]) => [String(k), Boolean(v)]))
+      : (existing[0]?.items as Record<string, boolean>) || {};
+
+    const sanitizedItemMinutes: Record<string, number> = itemMinutesInput
+      ? sanitizeItemMinutes(itemMinutesInput)
+      : sanitizeItemMinutes(existing[0]?.itemMinutes || {});
+
+    const totalProductiveMinutes =
+      status === 'skipped'
+        ? 0
+        : computeProductiveMinutes(sanitizedItems, sanitizedItemMinutes);
 
     let saved;
     if (existing.length > 0) {
       const updateObj: any = {
         status,
+        items: sanitizedItems,
+        itemMinutes: sanitizedItemMinutes,
+        totalProductiveMinutes,
         submittedAt: new Date(),
         updatedAt: new Date(),
         wasSharedAtSubmit: existing[0].wasSharedAtSubmit || (status === 'submitted' && isSharingDailyNow),
       };
-      if (itemsInput) updateObj.items = sanitizedItems;
       if (note !== undefined) updateObj.note = note;
       const updated = await db
         .update(memberDailyReports)
@@ -392,7 +439,9 @@ portalRouter.post('/my-track/report/submit', async (req, res) => {
           memberAccountId: authUser.userId,
           contactId: authUser.contactId,
           reportDate,
-          items: itemsInput ? sanitizedItems : {},
+          items: sanitizedItems,
+          itemMinutes: sanitizedItemMinutes,
+          totalProductiveMinutes,
           note: note ?? null,
           status,
           wasSharedAtSubmit: status === 'submitted' && isSharingDailyNow,
@@ -420,9 +469,12 @@ portalRouter.get('/my-track/summary', async (req, res) => {
 
     const range = req.query.range === 'month' ? 'month' : 'week';
     const daysCount = range === 'month' ? 30 : 7;
+    const todayDhaka = getDateStr(0);
     const startDate = getDateStr(-(daysCount - 1));
+    const sevenStart = getDateStr(-6);
+    const thirtyStart = getDateStr(-29);
 
-    const [itemsList, reports, dawahLogs] = await Promise.all([
+    const [itemsList, reports, dawahLogs, screenRows] = await Promise.all([
       db.select().from(trackerItems).where(eq(trackerItems.isActive, true)).orderBy(asc(trackerItems.displayOrder)),
       db
         .select()
@@ -434,15 +486,27 @@ portalRouter.get('/my-track/summary', async (req, res) => {
         .from(memberDawahLogs)
         .where(eq(memberDawahLogs.memberAccountId, authUser.userId))
         .orderBy(desc(memberDawahLogs.date)),
+      db
+        .select()
+        .from(memberScreenTimeRecords)
+        .where(eq(memberScreenTimeRecords.memberAccountId, authUser.userId))
+        .orderBy(desc(memberScreenTimeRecords.recordDate)),
     ]);
 
     const rangeReports = reports.filter((r) => r.reportDate >= startDate);
     const reportByDate = new Map(rangeReports.map((r) => [r.reportDate, r]));
+    const screenByDate = new Map(screenRows.map((s) => [s.recordDate, s]));
     const activeCount = Math.max(1, itemsList.length);
+
+    const minsForReport = (rep: any) =>
+      rep && rep.status !== 'skipped'
+        ? computeProductiveMinutes(rep.items || {}, rep.itemMinutes || {})
+        : 0;
 
     const dailySeries = Array.from({ length: daysCount }, (_, idx) => {
       const dateStr = getDateStr(-(daysCount - 1 - idx));
       const rep = reportByDate.get(dateStr);
+      const scr = screenByDate.get(dateStr);
       const checkedCount = rep
         ? itemsList.filter((it) => Boolean((rep.items || {})[it.key])).length
         : 0;
@@ -453,24 +517,56 @@ portalRouter.get('/my-track/summary', async (req, res) => {
         completed: checkedCount,
         total: itemsList.length,
         percentage: pct,
+        productiveMinutes: minsForReport(rep),
+        screenTimeMinutes: scr ? Number(scr.minutes) || 0 : 0,
         status: rep?.status || 'none',
       };
     });
 
-    // Item-wise breakdown
+    // Item-wise breakdown (including total time spent on each item in range)
     const itemStats = itemsList.map((it) => {
       let doneDays = 0;
+      let totalMinutes = 0;
       for (const r of rangeReports) {
-        if ((r.items || {})[it.key]) doneDays++;
+        if ((r.items || {})[it.key]) {
+          doneDays++;
+          const m = Number((r.itemMinutes || {})[it.key] || 0);
+          if (Number.isFinite(m) && m > 0) totalMinutes += m;
+        }
       }
       return {
         key: it.key,
         banglaLabel: it.banglaLabel,
         group: it.group,
         doneDays,
+        totalMinutes,
         percentage: Math.round((doneDays / daysCount) * 100),
       };
     });
+
+    const todayRep = reports.find((r) => r.reportDate === todayDhaka);
+    const todayProductiveMinutes = minsForReport(todayRep);
+    const weekProductiveMinutes = reports
+      .filter((r) => r.reportDate >= sevenStart)
+      .reduce((s, r) => s + minsForReport(r), 0);
+    const monthProductiveMinutes = reports
+      .filter((r) => r.reportDate >= thirtyStart)
+      .reduce((s, r) => s + minsForReport(r), 0);
+
+    const activeRangeDays = dailySeries.filter((d) => d.productiveMinutes > 0).length;
+    const rangeProductiveTotal = dailySeries.reduce((s, d) => s + d.productiveMinutes, 0);
+    const dailyAverageProductiveMinutes =
+      activeRangeDays > 0 ? Math.round(rangeProductiveTotal / activeRangeDays) : 0;
+
+    const todayScreen = screenByDate.get(todayDhaka) || null;
+    const weekScreenRows = screenRows.filter((s) => s.recordDate >= sevenStart);
+    const weeklyAvgScreenTimeMinutes =
+      weekScreenRows.length > 0
+        ? Math.round(
+            weekScreenRows.reduce((s, r) => s + (Number(r.minutes) || 0), 0) /
+              weekScreenRows.length
+          )
+        : 0;
 
     const submittedDays = rangeReports.filter((r) => r.status === 'submitted').length;
     const avgPct =
@@ -481,13 +577,344 @@ portalRouter.get('/my-track/summary', async (req, res) => {
     res.json({
       range,
       daysCount,
+      dhakaToday: todayDhaka,
       submittedDays,
       avgCompletionPct: avgPct,
       dawahLogsCount: dawahLogs.filter((l) => l.date >= startDate).length,
+      productiveSummary: {
+        todayMinutes: todayProductiveMinutes,
+        weekMinutes: weekProductiveMinutes,
+        monthMinutes: monthProductiveMinutes,
+        dailyAverageMinutes: dailyAverageProductiveMinutes,
+      },
+      screenTimeSummary: {
+        todayMinutes: todayScreen ? todayScreen.minutes : null,
+        todayDataSource: todayScreen ? todayScreen.dataSource : null,
+        weeklyAverageMinutes: weeklyAvgScreenTimeMinutes,
+      },
       dailySeries,
       itemStats,
       bestItems: [...itemStats].sort((a, b) => b.doneDays - a.doneDays).slice(0, 3),
       focusItems: [...itemStats].sort((a, b) => a.doneDays - b.doneDays).slice(0, 3),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// SCREEN TIME & PRODUCTIVE TIME + MEMBER HOME API
+// ==========================================
+portalRouter.get('/my-time/summary', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+    const range = req.query.range === 'month' ? 'month' : 'week';
+    const daysCount = range === 'month' ? 30 : 7;
+    const todayDhaka = getDateStr(0);
+    const startDate = getDateStr(-(daysCount - 1));
+    const sevenStart = getDateStr(-6);
+    const thirtyStart = getDateStr(-29);
+
+    const [itemsList, reports, screenRows] = await Promise.all([
+      db.select().from(trackerItems).where(eq(trackerItems.isActive, true)).orderBy(asc(trackerItems.displayOrder)),
+      db
+        .select()
+        .from(memberDailyReports)
+        .where(eq(memberDailyReports.memberAccountId, authUser.userId))
+        .orderBy(desc(memberDailyReports.reportDate))
+        .limit(40),
+      db
+        .select()
+        .from(memberScreenTimeRecords)
+        .where(eq(memberScreenTimeRecords.memberAccountId, authUser.userId))
+        .orderBy(desc(memberScreenTimeRecords.recordDate))
+        .limit(40),
+    ]);
+
+    const reportByDate = new Map(reports.map((r) => [r.reportDate, r]));
+    const screenByDate = new Map(screenRows.map((s) => [s.recordDate, s]));
+    const minsForReport = (rep: any) =>
+      rep && rep.status !== 'skipped'
+        ? computeProductiveMinutes(rep.items || {}, rep.itemMinutes || {})
+        : 0;
+
+    const comparisonSeries = Array.from({ length: daysCount }, (_, idx) => {
+      const dateStr = getDateStr(-(daysCount - 1 - idx));
+      const rep = reportByDate.get(dateStr);
+      const scr = screenByDate.get(dateStr);
+      const completedCount = rep
+        ? itemsList.filter((it) => Boolean((rep.items || {})[it.key])).length
+        : 0;
+      return {
+        date: dateStr,
+        label: dateStr.slice(5),
+        screenTimeMinutes: scr ? Number(scr.minutes) || 0 : 0,
+        hasScreenTimeRecord: Boolean(scr),
+        dataSource: scr?.dataSource || null,
+        productiveMinutes: minsForReport(rep),
+        completedCount,
+      };
+    });
+
+    const todayScreen = screenByDate.get(todayDhaka) || null;
+    const weekScreenRows = screenRows.filter((s) => s.recordDate >= sevenStart);
+    const weeklyAvgScreenTimeMinutes =
+      weekScreenRows.length > 0
+        ? Math.round(
+            weekScreenRows.reduce((s, r) => s + (Number(r.minutes) || 0), 0) /
+              weekScreenRows.length
+          )
+        : 0;
+
+    const todayRep = reportByDate.get(todayDhaka);
+    const todayProductiveMinutes = minsForReport(todayRep);
+    const weekProductiveMinutes = reports
+      .filter((r) => r.reportDate >= sevenStart)
+      .reduce((s, r) => s + minsForReport(r), 0);
+    const monthProductiveMinutes = reports
+      .filter((r) => r.reportDate >= thirtyStart)
+      .reduce((s, r) => s + minsForReport(r), 0);
+
+    const activeRangeDays = comparisonSeries.filter((d) => d.productiveMinutes > 0).length;
+    const rangeTotalProductive = comparisonSeries.reduce((s, d) => s + d.productiveMinutes, 0);
+    const dailyAverageProductiveMinutes =
+      activeRangeDays > 0 ? Math.round(rangeTotalProductive / activeRangeDays) : 0;
+
+    // Today activity time breakdown
+    const todayActivityBreakdown = itemsList
+      .map((it) => {
+        const checked = Boolean((todayRep?.items || {})[it.key]);
+        const rawMin = Number((todayRep?.itemMinutes || {})[it.key] || 0);
+        return {
+          key: it.key,
+          banglaLabel: it.banglaLabel,
+          group: it.group,
+          checked,
+          minutes: checked && rawMin > 0 ? rawMin : 0,
+          rawMinutes: rawMin > 0 ? rawMin : null,
+        };
+      })
+      .filter((x) => x.checked || (x.rawMinutes !== null && x.rawMinutes > 0));
+
+    res.json({
+      range,
+      dhakaToday: todayDhaka,
+      displayDateBn: formatDhakaDisplayDateBn(todayDhaka),
+      screenTime: {
+        todayMinutes: todayScreen ? todayScreen.minutes : null,
+        todayDataSource: todayScreen ? todayScreen.dataSource : null,
+        todayNote: todayScreen ? todayScreen.note : null,
+        weeklyAverageMinutes: weeklyAvgScreenTimeMinutes,
+        recordedDaysInWeek: weekScreenRows.length,
+        history: screenRows.filter((s) => s.recordDate >= startDate).slice(0, 30),
+      },
+      productiveTime: {
+        todayMinutes: todayProductiveMinutes,
+        weekMinutes: weekProductiveMinutes,
+        monthMinutes: monthProductiveMinutes,
+        dailyAverageMinutes: dailyAverageProductiveMinutes,
+        activeDaysInRange: activeRangeDays,
+        todayBreakdown: todayActivityBreakdown,
+      },
+      comparisonSeries,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+portalRouter.put('/my-time/screen-time', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+    const requestedDate = String(req.body?.recordDate || getDateStr(0));
+    const recordDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : getDateStr(0);
+
+    if (!isValidScreenTimeDateForMember(recordDate)) {
+      return res.status(400).json({ error: 'গত ৭ দিন থেকে আজ পর্যন্ত তারিখের স্ক্রিন টাইম আপডেট করা যাবে।' });
+    }
+
+    const rawMinutes = Number(req.body?.minutes);
+    if (!Number.isFinite(rawMinutes) || rawMinutes < 0 || rawMinutes > 1440) {
+      return res.status(400).json({ error: 'দৈনিক স্ক্রিন টাইম ০ থেকে ১৪৪০ মিনিটের (২৪ ঘণ্টা) মধ্যে হতে হবে।' });
+    }
+    const minutes = Math.round(rawMinutes);
+
+    const allowedSources = ['manual', 'android_usage_access', 'ios_screen_time', 'companion_sync'] as const;
+    const dataSource = allowedSources.includes(req.body?.dataSource)
+      ? req.body.dataSource
+      : 'manual';
+    const note = req.body?.note !== undefined ? (req.body.note ? String(req.body.note).trim().slice(0, 300) : null) : undefined;
+
+    const shareRows = await db
+      .select()
+      .from(memberSharingSettings)
+      .where(eq(memberSharingSettings.memberAccountId, authUser.userId));
+    const isSharingScreenTimeNow = Boolean(
+      shareRows[0]?.monitoringEnabled && shareRows[0]?.shareScreenTime
+    );
+
+    const existing = await db
+      .select()
+      .from(memberScreenTimeRecords)
+      .where(
+        and(
+          eq(memberScreenTimeRecords.memberAccountId, authUser.userId),
+          eq(memberScreenTimeRecords.recordDate, recordDate)
+        )
+      );
+
+    let saved;
+    if (existing.length > 0) {
+      const updateObj: any = {
+        minutes,
+        dataSource,
+        wasSharedAtSubmit: existing[0].wasSharedAtSubmit || isSharingScreenTimeNow,
+        updatedAt: new Date(),
+      };
+      if (note !== undefined) updateObj.note = note;
+      const updated = await db
+        .update(memberScreenTimeRecords)
+        .set(updateObj)
+        .where(eq(memberScreenTimeRecords.id, existing[0].id))
+        .returning();
+      saved = updated[0];
+    } else {
+      const inserted = await db
+        .insert(memberScreenTimeRecords)
+        .values({
+          memberAccountId: authUser.userId,
+          contactId: authUser.contactId,
+          recordDate,
+          minutes,
+          dataSource,
+          wasSharedAtSubmit: isSharingScreenTimeNow,
+          note: note ?? null,
+        })
+        .returning();
+      saved = inserted[0];
+    }
+
+    res.json({ record: saved });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+portalRouter.get('/my-home/overview', async (req, res) => {
+  try {
+    await ensureAiTables();
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+    const todayDhaka = getDateStr(0);
+    const sevenStart = getDateStr(-6);
+    const thirtyStart = getDateStr(-29);
+
+    const [itemsList, reports, screenRows, shareRows, assignedResponsibles] = await Promise.all([
+      db.select().from(trackerItems).where(eq(trackerItems.isActive, true)).orderBy(asc(trackerItems.displayOrder)),
+      db
+        .select()
+        .from(memberDailyReports)
+        .where(eq(memberDailyReports.memberAccountId, authUser.userId))
+        .orderBy(desc(memberDailyReports.reportDate))
+        .limit(40),
+      db
+        .select()
+        .from(memberScreenTimeRecords)
+        .where(eq(memberScreenTimeRecords.memberAccountId, authUser.userId))
+        .orderBy(desc(memberScreenTimeRecords.recordDate))
+        .limit(14),
+      db
+        .select()
+        .from(memberSharingSettings)
+        .where(eq(memberSharingSettings.memberAccountId, authUser.userId)),
+      getAssignedResponsiblesForContact(authUser.contactId),
+    ]);
+
+    const todayReport = reports.find((r) => r.reportDate === todayDhaka) || null;
+    const todayItems = (todayReport?.items as Record<string, boolean>) || {};
+    const todayItemMinutes = sanitizeItemMinutes(todayReport?.itemMinutes || {});
+    const totalAmalCount = itemsList.length;
+    const completedAmalCount = itemsList.filter((it) => Boolean(todayItems[it.key])).length;
+    const pendingAmalCount = Math.max(0, totalAmalCount - completedAmalCount);
+    const dailyProgressPct = totalAmalCount > 0 ? Math.round((completedAmalCount / totalAmalCount) * 100) : 0;
+
+    const minsForReport = (rep: any) =>
+      rep && rep.status !== 'skipped'
+        ? computeProductiveMinutes(rep.items || {}, rep.itemMinutes || {})
+        : 0;
+
+    const todayProductiveMinutes = minsForReport(todayReport);
+    const weeklyProductiveMinutes = reports
+      .filter((r) => r.reportDate >= sevenStart)
+      .reduce((s, r) => s + minsForReport(r), 0);
+    const monthlyProductiveMinutes = reports
+      .filter((r) => r.reportDate >= thirtyStart)
+      .reduce((s, r) => s + minsForReport(r), 0);
+
+    const todayScreen = screenRows.find((s) => s.recordDate === todayDhaka) || null;
+    const weekScreenRows = screenRows.filter((s) => s.recordDate >= sevenStart);
+    const weeklyAvgScreenTimeMinutes =
+      weekScreenRows.length > 0
+        ? Math.round(
+            weekScreenRows.reduce((s, r) => s + (Number(r.minutes) || 0), 0) /
+              weekScreenRows.length
+          )
+        : 0;
+
+    // Streak in Asia/Dhaka
+    let streak = 0;
+    const submittedDates = new Set(reports.filter((r) => r.status === 'submitted').map((r) => r.reportDate));
+    for (let offset = 0; offset < 35; offset++) {
+      const d = getDateStr(-offset);
+      if (submittedDates.has(d)) streak++;
+      else if (offset === 0) continue;
+      else break;
+    }
+
+    const sharingSettings = shareRows[0] || {
+      memberAccountId: authUser.userId,
+      monitoringEnabled: false,
+      shareDailyAmal: false,
+      shareDawahActivities: false,
+      sharePersonalNotes: false,
+      shareWeeklySummary: false,
+      shareProductiveTime: false,
+      shareScreenTime: false,
+      updatedAt: new Date(),
+    };
+
+    res.json({
+      dhakaToday: todayDhaka,
+      displayDateBn: formatDhakaDisplayDateBn(todayDhaka),
+      todayScreenTime: todayScreen
+        ? {
+            minutes: todayScreen.minutes,
+            dataSource: todayScreen.dataSource,
+            updatedAt: todayScreen.updatedAt,
+          }
+        : null,
+      weeklyAvgScreenTimeMinutes,
+      todayProductiveMinutes,
+      weeklyProductiveMinutes,
+      monthlyProductiveMinutes,
+      completedAmalCount,
+      pendingAmalCount,
+      totalAmalCount,
+      dailyProgressPct,
+      streak,
+      reportStatus: todayReport?.status || 'none',
+      trackerItems: itemsList,
+      todayItems,
+      todayItemMinutes,
+      assignedResponsibles,
+      sharingSettings,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -770,6 +1197,8 @@ portalRouter.get('/my-track/sharing', async (req, res) => {
       shareDawahActivities: false,
       sharePersonalNotes: false,
       shareWeeklySummary: false,
+      shareProductiveTime: false,
+      shareScreenTime: false,
       updatedAt: new Date(),
     };
 
@@ -820,6 +1249,8 @@ portalRouter.put('/my-track/sharing', async (req, res) => {
       shareDawahActivities: false,
       sharePersonalNotes: false,
       shareWeeklySummary: false,
+      shareProductiveTime: false,
+      shareScreenTime: false,
     };
 
     const nextState = {
@@ -839,6 +1270,14 @@ portalRouter.put('/my-track/sharing', async (req, res) => {
         req.body?.shareWeeklySummary !== undefined
           ? Boolean(req.body.shareWeeklySummary)
           : beforeState.shareWeeklySummary,
+      shareProductiveTime:
+        req.body?.shareProductiveTime !== undefined
+          ? Boolean(req.body.shareProductiveTime)
+          : beforeState.shareProductiveTime,
+      shareScreenTime:
+        req.body?.shareScreenTime !== undefined
+          ? Boolean(req.body.shareScreenTime)
+          : beforeState.shareScreenTime,
     };
 
     let saved;
@@ -959,17 +1398,26 @@ portalRouter.get('/monitoring/overview', async (req, res) => {
       return res.status(403).json({ error: 'অ্যাডমিন বা দায়িত্বশীল অ্যাক্সেস প্রয়োজন।' });
     }
 
-    const [allAccounts, allContacts, allSharing, allReports, tItems] = await Promise.all([
+    const [allAccounts, allContacts, allSharing, allReports, tItems, allScreenRows] = await Promise.all([
       db.select().from(memberAccounts),
       db.select().from(contacts),
       db.select().from(memberSharingSettings),
       db.select().from(memberDailyReports).orderBy(desc(memberDailyReports.submittedAt)),
       db.select().from(trackerItems).where(eq(trackerItems.isActive, true)),
+      db.select().from(memberScreenTimeRecords).orderBy(desc(memberScreenTimeRecords.recordDate)),
     ]);
 
     const contactMap = new Map(allContacts.map((c) => [c.id, c]));
     const sharingMap = new Map(allSharing.map((s) => [s.memberAccountId, s]));
     const today = getDateStr(0);
+
+    // Map today's screen time by memberAccountId (only if consented)
+    const todayScreenMap = new Map<string, number>();
+    for (const scr of allScreenRows) {
+      if (scr.recordDate === today && !todayScreenMap.has(scr.memberAccountId)) {
+        todayScreenMap.set(scr.memberAccountId, Number(scr.minutes) || 0);
+      }
+    }
 
     // Filter visible accounts if responsible
     const visibleAccounts = allAccounts.filter((acc) => {
@@ -987,7 +1435,8 @@ portalRouter.get('/monitoring/overview', async (req, res) => {
         r.status === 'submitted' &&
         r.reportDate === today &&
         (sharingMap.get(r.memberAccountId)?.shareDailyAmal ||
-          sharingMap.get(r.memberAccountId)?.shareWeeklySummary)
+          sharingMap.get(r.memberAccountId)?.shareWeeklySummary ||
+          sharingMap.get(r.memberAccountId)?.shareProductiveTime)
     );
 
     const recentFeed = allReports
@@ -996,7 +1445,8 @@ portalRouter.get('/monitoring/overview', async (req, res) => {
           monitoringOnIds.has(r.memberAccountId) &&
           r.status === 'submitted' &&
           (sharingMap.get(r.memberAccountId)?.shareDailyAmal ||
-            sharingMap.get(r.memberAccountId)?.shareWeeklySummary)
+            sharingMap.get(r.memberAccountId)?.shareWeeklySummary ||
+            sharingMap.get(r.memberAccountId)?.shareProductiveTime)
       )
       .slice(0, 20)
       .map((r) => {
@@ -1005,6 +1455,12 @@ portalRouter.get('/monitoring/overview', async (req, res) => {
         const share = sharingMap.get(r.memberAccountId);
         const checkedCount = share?.shareDailyAmal
           ? Object.values(r.items || {}).filter(Boolean).length
+          : null;
+        const productiveMinutes = share?.shareProductiveTime
+          ? computeProductiveMinutes(r.items || {}, r.itemMinutes || {})
+          : null;
+        const screenTimeMinutes = share?.shareScreenTime
+          ? (allScreenRows.find((s) => s.memberAccountId === r.memberAccountId && s.recordDate === r.reportDate)?.minutes ?? null)
           : null;
         return {
           id: r.id,
@@ -1016,6 +1472,8 @@ portalRouter.get('/monitoring/overview', async (req, res) => {
           area: contact?.area || null,
           completedCount: checkedCount,
           totalCount: tItems.length,
+          productiveMinutes,
+          screenTimeMinutes,
           note: share?.sharePersonalNotes ? r.note : null,
           isToday: r.reportDate === today,
         };
@@ -1345,19 +1803,20 @@ portalRouter.get('/reports/admin-summary', async (req, res) => {
     const daysCount = range === 'month' ? 30 : 7;
     const startDate = getDateStr(-(daysCount - 1));
 
-    const [allAccounts, allContacts, allSharing, allReports, tItems] = await Promise.all([
+    const [allAccounts, allContacts, allSharing, allReports, tItems, allScreenRows] = await Promise.all([
       db.select().from(memberAccounts),
       db.select().from(contacts),
       db.select().from(memberSharingSettings),
       db.select().from(memberDailyReports),
       db.select().from(trackerItems).where(eq(trackerItems.isActive, true)),
+      db.select().from(memberScreenTimeRecords),
     ]);
 
     const contactMap = new Map(allContacts.map((c) => [c.id, c]));
     const sharingMap = new Map(allSharing.map((s) => [s.memberAccountId, s]));
     const totalActiveItems = Math.max(1, tItems.length);
 
-    // ONLY members who have monitoringEnabled === true and shareWeeklySummary or shareDailyAmal === true
+    // ONLY members who have monitoringEnabled === true and shareWeeklySummary or shareDailyAmal or shareProductiveTime or shareScreenTime
     // NEVER include raw personal notes!
     const consentingSummaries = allAccounts
       .filter((acc) => {
@@ -1366,25 +1825,47 @@ portalRouter.get('/reports/admin-summary', async (req, res) => {
           return false;
         }
         const s = sharingMap.get(acc.id);
-        return Boolean(s?.monitoringEnabled && (s.shareWeeklySummary || s.shareDailyAmal));
+        return Boolean(
+          s?.monitoringEnabled &&
+            (s.shareWeeklySummary || s.shareDailyAmal || s.shareProductiveTime || s.shareScreenTime)
+        );
       })
       .map((acc) => {
+        const s = sharingMap.get(acc.id)!;
         const c = acc.contactId ? contactMap.get(acc.contactId) : null;
         const memberReps = allReports.filter(
           (r) => r.memberAccountId === acc.id && r.status === 'submitted' && r.reportDate >= startDate
         );
         let checked = 0;
         let slots = 0;
+        let totalProductive = 0;
         for (const r of memberReps) {
           checked += Object.values(r.items || {}).filter(Boolean).length;
           slots += totalActiveItems;
+          totalProductive += computeProductiveMinutes(r.items || {}, r.itemMinutes || {});
         }
+        const memberScreen = allScreenRows.filter(
+          (sr) => sr.memberAccountId === acc.id && sr.recordDate >= startDate
+        );
+        const avgScreenMinutes =
+          s.shareScreenTime && memberScreen.length > 0
+            ? Math.round(
+                memberScreen.reduce((sum, r) => sum + (Number(r.minutes) || 0), 0) /
+                  memberScreen.length
+              )
+            : null;
         return {
+          contactId: acc.contactId || null,
           memberName: c?.name || acc.username,
           area: c?.area || '—',
           currentStage: c?.currentStage || 1,
-          submittedDays: memberReps.length,
-          completionPct: slots > 0 ? Math.round((checked / slots) * 100) : 0,
+          submittedDays: s.shareWeeklySummary || s.shareDailyAmal ? memberReps.length : null,
+          completionPct:
+            (s.shareWeeklySummary || s.shareDailyAmal) && slots > 0
+              ? Math.round((checked / slots) * 100)
+              : null,
+          totalProductiveMinutes: s.shareProductiveTime ? totalProductive : null,
+          avgScreenTimeMinutes: avgScreenMinutes,
         };
       });
 

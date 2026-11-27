@@ -4,13 +4,16 @@ import {
   memberAssignments,
   memberSharingSettings,
   memberDailyReports,
+  memberScreenTimeRecords,
   memberDawahLogs,
   memberNotes,
   brandingSettings,
+  contacts,
 } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { parseToken } from './auth';
-import type { MemberPermissions, UserRole } from '../types';
+import { getDhakaDateStr, computeProductiveMinutes } from './dhakaTime';
+import type { AssignedResponsibleWorker, MemberPermissions, UserRole } from '../types';
 
 export interface ResolvedAuthUser {
   userId: string;
@@ -163,6 +166,38 @@ export function canDeleteContact(
   );
 }
 
+export async function getAssignedResponsiblesForContact(
+  contactId: string | null | undefined
+): Promise<AssignedResponsibleWorker[]> {
+  if (!contactId) return [];
+  const assigns = await db
+    .select()
+    .from(memberAssignments)
+    .where(eq(memberAssignments.contactId, contactId));
+  if (assigns.length === 0) return [];
+
+  const allAccs = await db.select().from(memberAccounts);
+  const allContacts = await db
+    .select({ id: contacts.id, name: contacts.name, phone: contacts.phone })
+    .from(contacts);
+  const accMap = new Map(allAccs.map((a) => [a.id, a]));
+  const contactMap = new Map(allContacts.map((c) => [c.id, c]));
+
+  const out: AssignedResponsibleWorker[] = [];
+  for (const a of assigns) {
+    const acc = accMap.get(a.responsibleAccountId);
+    if (!acc || !acc.isActive) continue;
+    const linked = acc.contactId ? contactMap.get(acc.contactId) : null;
+    out.push({
+      id: acc.id,
+      name: linked?.name || acc.username,
+      username: acc.username,
+      phone: linked?.phone || null,
+    });
+  }
+  return out;
+}
+
 export async function getConsentedSelfReportForAdmin(contactId: string) {
   const linkedAccounts = await db
     .select()
@@ -179,6 +214,8 @@ export async function getConsentedSelfReportForAdmin(contactId: string) {
       dawahLogs: [] as any[],
       personalNotes: [] as any[],
       weeklySummary: null as any,
+      productiveTimeSummary: null as any,
+      screenTimeSummary: null as any,
     };
   }
 
@@ -195,44 +232,69 @@ export async function getConsentedSelfReportForAdmin(contactId: string) {
     shareDawahActivities: false,
     sharePersonalNotes: false,
     shareWeeklySummary: false,
+    shareProductiveTime: false,
+    shareScreenTime: false,
     updatedAt: new Date(),
   };
 
   if (!settings.monitoringEnabled) {
     // Monitoring OFF: future/new/unshared data strictly hidden.
-    // Only reports that had previously been submitted while sharing was enabled are shown with the snapshot label.
-    const allSubmitted = await db
-      .select()
-      .from(memberDailyReports)
-      .where(eq(memberDailyReports.memberAccountId, acc.id))
-      .orderBy(desc(memberDailyReports.reportDate))
-      .limit(30);
+    // Only prior records that had explicitly been saved/submitted while sharing was enabled are shown as snapshots.
+    const [allSubmitted, allScreenRows] = await Promise.all([
+      db
+        .select()
+        .from(memberDailyReports)
+        .where(eq(memberDailyReports.memberAccountId, acc.id))
+        .orderBy(desc(memberDailyReports.reportDate))
+        .limit(30),
+      db
+        .select()
+        .from(memberScreenTimeRecords)
+        .where(eq(memberScreenTimeRecords.memberAccountId, acc.id))
+        .orderBy(desc(memberScreenTimeRecords.recordDate))
+        .limit(30),
+    ]);
 
     const priorSnapshots = allSubmitted.filter(
       (r) => r.status === 'submitted' && r.wasSharedAtSubmit === true
     );
+    const priorScreenSnapshots = allScreenRows.filter((s) => s.wasSharedAtSubmit === true);
 
     return {
       hasLinkedAccount: true,
       memberAccountId: acc.id,
       monitoringEnabled: false,
       settings,
-      previouslySharedOnly: priorSnapshots.length > 0,
+      previouslySharedOnly: priorSnapshots.length > 0 || priorScreenSnapshots.length > 0,
       dailyReports: priorSnapshots.map((r) => ({ ...r, note: null })),
       dawahLogs: [],
       personalNotes: [],
       weeklySummary: null,
+      productiveTimeSummary: null,
+      screenTimeSummary:
+        priorScreenSnapshots.length > 0
+          ? {
+              snapshotOnly: true,
+              todayMinutes: null,
+              todayDataSource: null,
+              weeklyAverageMinutes: null,
+              history: priorScreenSnapshots.slice(0, 14),
+            }
+          : null,
     };
   }
 
-  const [reports, dawahLogs, notes] = await Promise.all([
-    settings.shareDailyAmal || settings.shareWeeklySummary
+  const needReports =
+    settings.shareDailyAmal || settings.shareWeeklySummary || settings.shareProductiveTime;
+
+  const [reports, dawahLogs, notes, screenRows] = await Promise.all([
+    needReports
       ? db
           .select()
           .from(memberDailyReports)
           .where(eq(memberDailyReports.memberAccountId, acc.id))
           .orderBy(desc(memberDailyReports.reportDate))
-          .limit(30)
+          .limit(35)
       : Promise.resolve([]),
     settings.shareDawahActivities
       ? db
@@ -250,13 +312,24 @@ export async function getConsentedSelfReportForAdmin(contactId: string) {
           .orderBy(desc(memberNotes.date))
           .limit(30)
       : Promise.resolve([]),
+    settings.shareScreenTime
+      ? db
+          .select()
+          .from(memberScreenTimeRecords)
+          .where(eq(memberScreenTimeRecords.memberAccountId, acc.id))
+          .orderBy(desc(memberScreenTimeRecords.recordDate))
+          .limit(30)
+      : Promise.resolve([]),
   ]);
+
+  const todayDhaka = getDhakaDateStr(0);
+  const sevenDaysStart = getDhakaDateStr(-6);
+  const thirtyDaysStart = getDhakaDateStr(-29);
 
   const submittedReports = reports.filter((r) => r.status === 'submitted');
   let weeklySummary: any = null;
   if (settings.shareWeeklySummary) {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const weekReps = submittedReports.filter((r) => r.reportDate >= sevenDaysAgo);
+    const weekReps = submittedReports.filter((r) => r.reportDate >= sevenDaysStart);
     let checkedTotal = 0;
     let totalSlots = 0;
     for (const r of weekReps) {
@@ -271,10 +344,67 @@ export async function getConsentedSelfReportForAdmin(contactId: string) {
     };
   }
 
-  const sanitizeReports = (list: typeof submittedReports, includeNotes: boolean) =>
+  let productiveTimeSummary: any = null;
+  if (settings.shareProductiveTime) {
+    // Recompute deterministically from items & itemMinutes (skip 'skipped' reports)
+    const activeReps = reports.filter((r) => r.status !== 'skipped');
+    const minsFor = (r: any) =>
+      computeProductiveMinutes(r.items || {}, r.itemMinutes || {});
+
+    const todayRep = activeReps.find((r) => r.reportDate === todayDhaka);
+    const todayMinutes = todayRep ? minsFor(todayRep) : 0;
+
+    const weekReps = activeReps.filter((r) => r.reportDate >= sevenDaysStart);
+    const monthReps = activeReps.filter((r) => r.reportDate >= thirtyDaysStart);
+
+    const weekMinutes = weekReps.reduce((s, r) => s + minsFor(r), 0);
+    const monthMinutes = monthReps.reduce((s, r) => s + minsFor(r), 0);
+    const activeWeekDays = weekReps.filter((r) => minsFor(r) > 0).length;
+    const dailyAverageMinutes =
+      activeWeekDays > 0 ? Math.round(weekMinutes / activeWeekDays) : 0;
+
+    productiveTimeSummary = {
+      todayMinutes,
+      weekMinutes,
+      monthMinutes,
+      dailyAverageMinutes,
+      dailySeries: weekReps.map((r) => ({
+        date: r.reportDate,
+        minutes: minsFor(r),
+      })),
+    };
+  }
+
+  let screenTimeSummary: any = null;
+  if (settings.shareScreenTime) {
+    const todayScreen = screenRows.find((s) => s.recordDate === todayDhaka) || null;
+    const weekScreenRows = screenRows.filter((s) => s.recordDate >= sevenDaysStart);
+    const weekSum = weekScreenRows.reduce((s, r) => s + (Number(r.minutes) || 0), 0);
+    const weeklyAverageMinutes =
+      weekScreenRows.length > 0 ? Math.round(weekSum / weekScreenRows.length) : 0;
+
+    screenTimeSummary = {
+      snapshotOnly: false,
+      todayMinutes: todayScreen ? todayScreen.minutes : null,
+      todayDataSource: todayScreen ? todayScreen.dataSource : null,
+      weeklyAverageMinutes,
+      recordedDaysInWeek: weekScreenRows.length,
+      history: screenRows.slice(0, 14),
+    };
+  }
+
+  const sanitizeReports = (
+    list: typeof submittedReports,
+    includeNotes: boolean,
+    includeProductiveTime: boolean
+  ) =>
     list.map((r) => ({
       ...r,
       note: includeNotes ? r.note : null,
+      itemMinutes: includeProductiveTime ? r.itemMinutes || {} : {},
+      totalProductiveMinutes: includeProductiveTime
+        ? computeProductiveMinutes(r.items || {}, r.itemMinutes || {})
+        : null,
     }));
 
   return {
@@ -284,10 +414,16 @@ export async function getConsentedSelfReportForAdmin(contactId: string) {
     settings,
     previouslySharedOnly: false,
     dailyReports: settings.shareDailyAmal
-      ? sanitizeReports(submittedReports, Boolean(settings.sharePersonalNotes))
+      ? sanitizeReports(
+          submittedReports,
+          Boolean(settings.sharePersonalNotes),
+          Boolean(settings.shareProductiveTime)
+        )
       : [],
     dawahLogs: settings.shareDawahActivities ? dawahLogs : [],
     personalNotes: settings.sharePersonalNotes ? notes : [],
     weeklySummary,
+    productiveTimeSummary,
+    screenTimeSummary,
   };
 }

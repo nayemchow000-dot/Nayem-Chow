@@ -58,7 +58,10 @@ import {
   Shield,
   Eye,
   Lock,
+  Smartphone,
 } from 'lucide-react';
+import { formatMinutesBn, formatMinutesCompactBn, toBanglaDigits } from '../lib/dhakaTime';
+import { getScreenTimeSourceLabelBn } from '../components/ScreenTimeComparisonCard';
 
 export default function ContactProfile() {
   const { id } = useParams();
@@ -1258,6 +1261,109 @@ export default function ContactProfile() {
                     </div>
                   )}
 
+                  {(sr.productiveTimeSummary || sr.screenTimeSummary) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {sr.productiveTimeSummary && (
+                        <Card>
+                          <CardHeader className="border-b border-white/10 pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[#34D399]">
+                              <Clock className="w-4 h-4" />
+                              সম্মতিপ্রাপ্ত Productive Time
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-4 grid grid-cols-2 gap-3 text-xs">
+                            <div className="p-3 rounded-xl glass-2">
+                              <div className="text-[#8EA39A]">আজকের সময়</div>
+                              <div className="text-base font-serif italic text-[#34D399] mt-0.5 tabular-nums">
+                                {formatMinutesBn(sr.productiveTimeSummary.todayMinutes)}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl glass-2">
+                              <div className="text-[#8EA39A]">৭ দিনের মোট</div>
+                              <div className="text-base font-serif italic text-[#B6F5D8] mt-0.5 tabular-nums">
+                                {formatMinutesBn(sr.productiveTimeSummary.weekMinutes)}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl glass-2">
+                              <div className="text-[#8EA39A]">৩০ দিনের মোট</div>
+                              <div className="text-sm font-mono text-[#EDF4F0] mt-0.5 tabular-nums">
+                                {formatMinutesBn(sr.productiveTimeSummary.monthMinutes)}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl glass-2">
+                              <div className="text-[#8EA39A]">দৈনিক গড়</div>
+                              <div className="text-sm font-mono text-[#EDF4F0] mt-0.5 tabular-nums">
+                                {formatMinutesBn(sr.productiveTimeSummary.dailyAverageMinutes)}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {sr.screenTimeSummary && (
+                        <Card>
+                          <CardHeader className="border-b border-white/10 pb-3 flex flex-row items-center justify-between gap-2">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[#F4A85E]">
+                              <Smartphone className="w-4 h-4" />
+                              সম্মতিপ্রাপ্ত মোবাইল স্ক্রিন টাইম
+                            </CardTitle>
+                            {sr.screenTimeSummary.snapshotOnly && (
+                              <span className="px-2 py-0.5 rounded-full bg-[#F4A85E]/15 text-[#E8CD92] text-[10px]">
+                                পূর্বের স্ন্যাপশট
+                              </span>
+                            )}
+                          </CardHeader>
+                          <CardContent className="pt-4 space-y-3 text-xs">
+                            {!sr.screenTimeSummary.snapshotOnly && (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="p-3 rounded-xl glass-2">
+                                  <div className="text-[#8EA39A]">আজকের স্ক্রিন টাইম</div>
+                                  <div className="text-base font-serif italic text-[#F4A85E] mt-0.5 tabular-nums">
+                                    {sr.screenTimeSummary.todayMinutes !== null
+                                      ? formatMinutesBn(sr.screenTimeSummary.todayMinutes)
+                                      : 'লগ হয়নি'}
+                                  </div>
+                                  {sr.screenTimeSummary.todayDataSource && (
+                                    <div className="text-[10px] text-[#8EA39A] mt-0.5">
+                                      {getScreenTimeSourceLabelBn(sr.screenTimeSummary.todayDataSource)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="p-3 rounded-xl glass-2">
+                                  <div className="text-[#8EA39A]">সাপ্তাহিক গড়</div>
+                                  <div className="text-base font-serif italic text-[#E8CD92] mt-0.5 tabular-nums">
+                                    {formatMinutesBn(sr.screenTimeSummary.weeklyAverageMinutes || 0)}
+                                  </div>
+                                  <div className="text-[10px] text-[#8EA39A] mt-0.5 tabular-nums">
+                                    রেকর্ড: {toBanglaDigits(sr.screenTimeSummary.recordedDaysInWeek || 0)} দিন
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {(sr.screenTimeSummary.history || []).length > 0 && (
+                              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                {(sr.screenTimeSummary.history || []).slice(0, 7).map((h: any) => (
+                                  <div
+                                    key={h.id}
+                                    className="px-2.5 py-1.5 rounded-lg glass-2 flex items-center justify-between text-[11px]"
+                                  >
+                                    <span className="font-mono text-[#8EA39A] tabular-nums">
+                                      {h.recordDate} · {getScreenTimeSourceLabelBn(h.dataSource)}
+                                    </span>
+                                    <span className="font-mono text-[#F4A85E] tabular-nums">
+                                      {formatMinutesCompactBn(h.minutes)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  )}
+
                   <Card>
                     <CardHeader className="border-b border-white/10 pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -1272,22 +1378,36 @@ export default function ContactProfile() {
                         </p>
                       ) : (
                         sr.dailyReports.map((rep: any) => {
-                          const checkedLabels = Object.entries(rep.items || {})
+                          const checkedEntries = Object.entries(rep.items || {})
                             .filter(([, v]) => Boolean(v))
-                            .map(([k]) => itemLabelMap.get(k) || k);
+                            .map(([k]) => ({
+                              key: k,
+                              label: itemLabelMap.get(k) || k,
+                              mins: Number((rep.itemMinutes || {})[k] || 0),
+                            }));
                           return (
                             <div key={rep.id} className="p-4 rounded-2xl glass-2 space-y-2">
-                              <div className="flex items-center justify-between text-xs">
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <span className="font-mono text-[#34D399] tabular-nums">{rep.reportDate}</span>
-                                <span className="text-[#B6F5D8] font-mono tabular-nums">
-                                  সম্পন্ন: {checkedLabels.length}টি
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  {rep.totalProductiveMinutes !== null && rep.totalProductiveMinutes !== undefined && (
+                                    <span className="px-2 py-0.5 rounded-full bg-[#34D399]/15 text-[#34D399] font-mono tabular-nums text-[11px]">
+                                      Productive: {formatMinutesCompactBn(rep.totalProductiveMinutes)}
+                                    </span>
+                                  )}
+                                  <span className="text-[#B6F5D8] font-mono tabular-nums">
+                                    সম্পন্ন: {toBanglaDigits(checkedEntries.length)}টি
+                                  </span>
+                                </div>
                               </div>
-                              {checkedLabels.length > 0 && (
+                              {checkedEntries.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5">
-                                  {checkedLabels.map((lbl, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 rounded-full bg-[#34D399]/12 text-[#B6F5D8] text-[11px]">
-                                      ✓ {lbl}
+                                  {checkedEntries.map((item) => (
+                                    <span key={item.key} className="px-2 py-0.5 rounded-full bg-[#34D399]/12 text-[#B6F5D8] text-[11px] tabular-nums">
+                                      ✓ {item.label}
+                                      {rep.totalProductiveMinutes !== null && item.mins > 0
+                                        ? ` (${formatMinutesCompactBn(item.mins)})`
+                                        : ''}
                                     </span>
                                   ))}
                                 </div>
@@ -1432,6 +1552,16 @@ export default function ContactProfile() {
                         সাপ্তাহিক রিপোর্ট: {monitoringView.selfReport.weeklySummary?.daysReported ?? 0} দিন · সম্পূর্ণতা:{' '}
                         {monitoringView.selfReport.weeklySummary?.completionPct ?? 0}%
                       </p>
+                      {monitoringView.selfReport.productiveTimeSummary && (
+                        <p className="text-[#34D399] tabular-nums">
+                          সাপ্তাহিক Productive Time: {formatMinutesBn(monitoringView.selfReport.productiveTimeSummary.weekMinutes)}
+                        </p>
+                      )}
+                      {monitoringView.selfReport.screenTimeSummary && !monitoringView.selfReport.screenTimeSummary.snapshotOnly && (
+                        <p className="text-[#F4A85E] tabular-nums">
+                          সাপ্তাহিক গড় Screen Time: {formatMinutesBn(monitoringView.selfReport.screenTimeSummary.weeklyAverageMinutes || 0)}
+                        </p>
+                      )}
                       <p className="text-[#8EA39A]">
                         মোট জমাকৃত দৈনিক রিপোর্ট: {(monitoringView.selfReport.dailyReports || []).length}টি
                       </p>

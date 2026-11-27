@@ -8,7 +8,7 @@ import { BrandLogo } from './components/BrandLogo';
 import {
   LayoutDashboard, Users, Settings, Activity, CalendarHeart,
   Tags, Menu, X, ShieldCheck, LogOut, Globe, User,
-  Sparkles, CheckSquare, Eye, Loader2
+  Sparkles, CheckSquare, Eye, Loader2, Home, Clock, BarChart3
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -22,11 +22,13 @@ const Activities = lazy(() => import('./pages/Activities'));
 const Categories = lazy(() => import('./pages/Categories'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const Login = lazy(() => import('./pages/Login'));
+const MemberHome = lazy(() => import('./pages/MemberHome'));
 const MemberDashboard = lazy(() => import('./pages/MemberDashboard'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile'));
 const AdminAccounts = lazy(() => import('./pages/AdminAccounts'));
 const AIDashboard = lazy(() => import('./pages/AIDashboard'));
 const MyDawahTrack = lazy(() => import('./pages/MyDawahTrack'));
+const MyTime = lazy(() => import('./pages/MyTime'));
 const Monitoring = lazy(() => import('./pages/Monitoring'));
 
 function PageFallback() {
@@ -106,11 +108,13 @@ function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) 
   ];
 
   const memberLinks: Array<{ href: string; label: string; icon: any; badge?: string }> = [
-    ...(featureFlags.featureMyDawahTrack ? [myTrackLink] : []),
-    { href: '/my-dashboard', label: 'আমার ড্যাশবোর্ড', icon: User },
+    { href: '/', label: 'Home | হোম', icon: Home },
+    ...(featureFlags.featureMyDawahTrack ? [{ href: '/my-track', label: 'My Dawah Track', icon: CheckSquare }] : []),
+    { href: '/my-time', label: 'My Time | সময়', icon: Clock },
+    { href: '/my-reports', label: 'My Reports | রিপোর্ট', icon: BarChart3 },
+    { href: '/my-dashboard', label: 'My Profile | প্রোফাইল', icon: User },
+    { href: '/my-settings', label: 'Settings | সেটিংস', icon: Settings },
     { href: '/ai-dashboard', label: 'AI ভয়েস সেন্টার', icon: Sparkles },
-    { href: '/contacts', label: 'আমার মুভমেন্ট প্রোফাইল', icon: Users },
-    { href: '/activities', label: 'দাওয়া কার্যক্রম', icon: CalendarHeart },
   ];
 
   const links = isAdmin ? adminLinks : isResponsible ? responsibleLinks : memberLinks;
@@ -332,6 +336,16 @@ function ProtectedLayout() {
                       </Link>
                     )}
 
+                    {!isCoordinator && (
+                      <Link
+                        to="/my-settings"
+                        className="lg:hidden p-2 rounded-xl text-[#8EA39A] hover:text-[#EDF4F0] hover:bg-white/10 transition-colors"
+                        aria-label="Settings"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </Link>
+                    )}
+
                     <span className="hidden xl:inline whitespace-nowrap shrink-0 text-[#8EA39A] font-medium">
                       {user.contact?.name || user.username} · {user.role === 'admin' ? 'Admin' : user.role === 'responsible' ? 'দায়িত্বশীল' : 'Member'}
                     </span>
@@ -340,13 +354,17 @@ function ProtectedLayout() {
               </header>
             </div>
 
-            <main className="flex-1 px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col min-w-0 overflow-x-hidden">
+            <main className={cn("flex-1 px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col min-w-0 overflow-x-hidden", !isCoordinator && "pb-20 lg:pb-6")}>
               <div className="flex-1 w-full max-w-6xl mx-auto">
                 <Suspense fallback={<PageFallback />}>
                   <Routes>
-                    {/* Member Landing defaults to MemberDashboard; Admin/Responsible gets Priority Dashboard */}
-                    <Route path="/" element={isCoordinator ? <Dashboard /> : <MemberDashboard />} />
+                    {/* Member Landing defaults to MemberHome; Admin/Responsible gets Priority Dashboard */}
+                    <Route path="/" element={isCoordinator ? <Dashboard /> : <MemberHome />} />
+                    <Route path="/home" element={<MemberHome />} />
                     <Route path="/my-track" element={<MyDawahTrack />} />
+                    <Route path="/my-time" element={<MyTime />} />
+                    <Route path="/my-reports" element={<MyDawahTrack initialTab="weekly" />} />
+                    <Route path="/my-settings" element={<MyDawahTrack initialTab="privacy" />} />
                     <Route path="/monitoring" element={isCoordinator ? <Monitoring /> : <Navigate to="/my-track" replace />} />
                     <Route path="/ai-dashboard" element={canAiCenter ? <AIDashboard /> : <Navigate to="/my-dashboard" replace />} />
                     <Route path="/my-dashboard" element={<MemberDashboard />} />
@@ -364,6 +382,41 @@ function ProtectedLayout() {
             </main>
           </div>
         </div>
+
+        {/* Fixed Compact Mobile Bottom Navigation for Member Role (<= 60px height) */}
+        {!isCoordinator && (
+          <nav
+            aria-label="Member mobile navigation"
+            className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-[58px] bg-[#07100D]/92 backdrop-blur-xl border-t border-white/10 px-1.5 flex items-center justify-around no-print"
+          >
+            {[
+              { href: '/', label: 'Home', icon: Home },
+              { href: '/my-track', label: 'Track', icon: CheckSquare },
+              { href: '/my-time', label: 'Time', icon: Clock },
+              { href: '/my-reports', label: 'Reports', icon: BarChart3 },
+              { href: '/my-dashboard', label: 'Profile', icon: User },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const active =
+                tab.href === '/'
+                  ? location.pathname === '/' || location.pathname === '/home'
+                  : location.pathname.startsWith(tab.href);
+              return (
+                <Link
+                  key={tab.href}
+                  to={tab.href}
+                  className={cn(
+                    "min-w-[56px] min-h-[44px] flex flex-col items-center justify-center gap-0.5 rounded-xl px-2 transition-colors",
+                    active ? "text-[#34D399]" : "text-[#8EA39A] hover:text-[#EDF4F0]"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="text-[10px] font-medium leading-none">{tab.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         {/* Care Plan Drawer & Multi-turn Gemini Dawah Assistant */}
         <CarePlanDrawer />
